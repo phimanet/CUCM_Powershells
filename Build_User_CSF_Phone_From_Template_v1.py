@@ -68,7 +68,10 @@ def choose_environment():
     print("\nSelect CUCM Environment:")
     print("  1 - PRODUCTION (lascucmpp01.ahs.int)")
     print("  2 - LAB        (lascucmpl01.ahs.int)")
-    choice = input("Enter choice (1 or 2): ").strip()
+    print("  0 - Return to main menu")
+    choice = input("Enter choice (0, 1, or 2): ").strip()
+    if choice == "0":
+        return None, None
     if choice == "1":
         return PROD_CUCM_IP, "PRODUCTION"
     return LAB_CUCM_IP, "LAB"
@@ -78,7 +81,10 @@ def choose_dn_prefix():
     print("\nSelect Directory Number Type:")
     print("  1 - Recruiter (469)")
     print("  2 - General FTE (214)")
-    choice = input("Enter choice (1 or 2): ").strip()
+    print("  0 - Return to main menu")
+    choice = input("Enter choice (0, 1, or 2): ").strip()
+    if choice == "0":
+        return None, None
     if choice == "1":
         return "469", "Recruiter"
     return "214", "General FTE"
@@ -339,6 +345,8 @@ def main():
     template = load_template(template_path)
 
     cucm_ip, env_name = choose_environment()
+    if cucm_ip is None:
+        return
     print(f"Using {env_name} CUCM: {cucm_ip}")
 
     cucm_user = input("Enter CUCM Username: ").strip()
@@ -350,6 +358,8 @@ def main():
 
     while True:
         dn_prefix, dn_type_name = choose_dn_prefix()
+        if dn_prefix is None:
+            return
         print(f"Using DN type: {dn_type_name} ({dn_prefix}xxxxxxx)")
 
         target_user = input("Enter target End User userid (example: Sarah.Paris): ").strip()
@@ -440,7 +450,12 @@ def main():
                                 run_success = True
 
             except Exception as e:
-                log_writer.writerow(["Script", "Error", str(e)])
+                err_msg = str(e)
+                log_writer.writerow(["Script", "Error", err_msg])
+                if "The specified User was not found" in err_msg or "5007" in err_msg:
+                    print(f"\n✗ Invalid User: '{target_user}' was not found in CUCM.")
+                    print(f"Results logged to: {log_filename}")
+                    continue
                 print(f"✗ Script error: {e}")
                 print(f"Results logged to: {log_filename}")
 
