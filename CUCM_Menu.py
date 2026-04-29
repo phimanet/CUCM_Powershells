@@ -49,6 +49,9 @@ def main():
 
         print("\n--- End Users ---")
         print("  6. Extract End User by Last Name")
+
+        print("\n--- Phone Devices ---")
+        print("  8. Extract ALL Phone Devices")
         
         print("\n--- Server Tools ---")
         print("  7. Do LDAP User Sync")
@@ -57,7 +60,7 @@ def main():
         print("  0. Exit")
         print("==================================================")
         
-        choice = input("\nEnter your choice (0-7): ")
+        choice = input("\nEnter your choice (0-8): ")
         
         if choice == '1':
             run_script("Add_DirectoryNumber_v1.py")
@@ -73,12 +76,14 @@ def main():
             run_script("Extract_EndUser_v1.py")
         elif choice == '7':
             run_script("CUCM_LDAP_Sync_v1.py")
+        elif choice == '8':
+            run_script("Extract_All_Phones_v1.py")
         elif choice == '0':
             clear_screen()
             print("Exiting Toolkit. Goodbye!")
             break
         else:
-            print("\nInvalid choice. Please enter a number between 0 and 7.")
+            print("\nInvalid choice. Please enter a number between 0 and 8.")
             input("Press Enter to try again...")
 
 if __name__ == "__main__":
