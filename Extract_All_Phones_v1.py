@@ -209,12 +209,3 @@ print(f"\n✓ Export complete!")
 print(f"  Total devices exported : {len(all_rows)}")
 print(f"  Total fields captured  : {len(all_headers)}")
 print(f"  Output file            : {log_filename}")
-
-            print(f"✓ Extraction complete! Results saved to: {log_filename}")
-
-        else:
-            print(f"✗ Error Connecting - HTTP Status {response.status_code}")
-            print(response.text)
-
-    except Exception as e:
-        print(f"✗ Script Exception: {e}")
