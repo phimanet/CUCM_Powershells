@@ -365,7 +365,7 @@ def main():
             return
         print(f"Using DN type: {dn_type_name} ({dn_prefix}xxxxxxx)")
 
-        target_user = input("Enter target End User userid (example: Sarah.Paris): ").strip()
+        target_user = input("Username of the person who needs Cisco Jabber: ").strip()
 
         if not target_user:
             print("No target userid provided. Returning to main menu.")
