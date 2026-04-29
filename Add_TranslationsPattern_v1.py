@@ -15,7 +15,17 @@ session = requests.Session()
 session.verify = False
 session.auth = HTTPBasicAuth(cucm_user, cucm_pass)
 
-CUCM_IP = 'lascucmpl01.ahs.int'
+# Ask which CUCM environment to use
+print("\nSelect CUCM Environment:")
+print("  1 - PRODUCTION (lascucmpp01.ahs.int)")
+print("  2 - LAB        (lascucmpl01.ahs.int)")
+cucm_choice = input("Enter choice (1 or 2): ").strip()
+if cucm_choice == '1':
+    CUCM_IP = 'lascucmpp01.ahs.int'
+    print("Using PRODUCTION CUCM")
+else:
+    CUCM_IP = 'lascucmpl01.ahs.int'
+    print("Using LAB CUCM")
 input_csv = 'translation_patterns_insert_template.csv'
 
 # Generate the dynamic filename for the log

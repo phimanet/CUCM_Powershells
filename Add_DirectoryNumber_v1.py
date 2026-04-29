@@ -15,13 +15,18 @@ session = requests.Session()
 session.verify = False
 session.auth = HTTPBasicAuth(cucm_user, cucm_pass)
 
-#PRODUCTION Info
-#CUCM_IP = 'lascucmpp01.ahs.int'
-#vmprofile = 'VM_Profile_10Digits'
-
-#LAB info
-CUCM_IP = 'lascucmpl01.ahs.int'
-vmprofile = 'AMN_10_Digit'
+# Ask which CUCM environment to use
+print("\nSelect CUCM Environment:")
+print("  1 - PRODUCTION (lascucmpp01.ahs.int)")
+print("  2 - LAB        (lascucmpl01.ahs.int)")
+cucm_choice = input("Enter choice (1 or 2): ").strip()
+if cucm_choice == '1':
+    CUCM_IP = 'lascucmpp01.ahs.int'
+    print("Using PRODUCTION CUCM")
+else:
+    CUCM_IP = 'lascucmpl01.ahs.int'
+    print("Using LAB CUCM")
+vmprofile = 'VM_Profile_10Digits'
 
 # <-- 2. Generate the dynamic filename
 current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") # Formats as YYYYMMDD_HHMMSS
