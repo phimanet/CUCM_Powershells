@@ -73,7 +73,7 @@ def main():
             print("Exiting Toolkit. Goodbye!")
             break
         else:
-            print("\nInvalid choice. Please enter a number between 0 and 5.")
+            print("\nInvalid choice. Please enter a number between 0 and 6.")
             input("Press Enter to try again...")
 
 if __name__ == "__main__":

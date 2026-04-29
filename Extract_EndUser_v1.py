@@ -130,7 +130,16 @@ def main():
     session.verify = False
     session.auth = HTTPBasicAuth(cucm_user, cucm_pass)
 
-    CUCM_HOST = "lascucmpl01.ahs.int"
+    print("\nSelect CUCM Environment:")
+    print("  1 - PRODUCTION (lascucmpp01.ahs.int)")
+    print("  2 - LAB        (lascucmpl01.ahs.int)")
+    cucm_choice = input("Enter choice (1 or 2): ").strip()
+    if cucm_choice == "1":
+        cucm_host = "lascucmpp01.ahs.int"
+        print("Using PRODUCTION CUCM")
+    else:
+        cucm_host = "lascucmpl01.ahs.int"
+        print("Using LAB CUCM")
 
     last_name = input("\nEnter Last Name to search: ").strip()
     if not last_name:
@@ -160,7 +169,7 @@ def main():
 </soapenv:Envelope>"""
 
     try:
-        resp = axl_post(session, CUCM_HOST, list_user_soap)
+        resp = axl_post(session, cucm_host, list_user_soap)
     except Exception as e:
         print(f"\n✗ Exception calling AXL listUser: {e}")
         return
@@ -228,7 +237,7 @@ def main():
     print(f"\nFetching all available fields for userid: {userid} ...")
 
     try:
-        resp2 = axl_post(session, CUCM_HOST, get_user_soap)
+        resp2 = axl_post(session, cucm_host, get_user_soap)
     except Exception as e:
         print(f"\n✗ Exception calling AXL getUser: {e}")
         return

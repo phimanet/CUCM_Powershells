@@ -10,9 +10,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 cucm_user = input("Enter CUCM Username: ")
 cucm_pass = getpass.getpass("Enter CUCM Password: ") 
 
-# Hardcoded LDAP Directory Name
-ldap_agreement_name = "LAB_LDAP_AMN"
-
 session = requests.Session()
 session.verify = False
 session.auth = HTTPBasicAuth(cucm_user, cucm_pass)
@@ -24,9 +21,11 @@ print("  2 - LAB        (lascucmpl01.ahs.int)")
 cucm_choice = input("Enter choice (1 or 2): ").strip()
 if cucm_choice == '1':
     CUCM_IP = 'lascucmpp01.ahs.int'
+    ldap_agreement_name = 'LDAP_AMN'
     print("Using PRODUCTION CUCM")
 else:
     CUCM_IP = 'lascucmpl01.ahs.int'
+    ldap_agreement_name = 'LAB_LDAP_AMN'
     print("Using LAB CUCM")
 
 # Construct the SOAP request for doLdapSync
