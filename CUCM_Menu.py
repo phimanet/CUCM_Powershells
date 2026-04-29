@@ -52,7 +52,7 @@ def main():
 
         print("\n--- Phone Devices ---")
         print("  8. Extract ALL Phone Devices")
-        print("  9. Build LAB CSF Phone From Template")
+        print("  9. Build CSF Phone From Template")
         
         print("\n--- Server Tools ---")
         print("  7. Do LDAP User Sync")

@@ -1,4 +1,4 @@
-import csv
+﻿import csv
 import datetime
 import getpass
 import json
@@ -12,8 +12,10 @@ from xml.sax.saxutils import escape
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 LAB_CUCM_IP = "lascucmpl01.ahs.int"
+PROD_CUCM_IP = "lascucmpp01.ahs.int"
 TEMPLATE_FILE = "phone_device_template_lab_csf.json"
 OUTPUT_DIR = "output_logs"
+ROUTE_PARTITION = "ENT_DEVICE_PT"
 
 
 def axl_post(session, cucm_ip, soap_xml):
@@ -62,7 +64,27 @@ def confirm_yes_no(prompt, default_yes=True):
     return value in ["y", "yes"]
 
 
-def get_user_details(session, username):
+def choose_environment():
+    print("\nSelect CUCM Environment:")
+    print("  1 - PRODUCTION (lascucmpp01.ahs.int)")
+    print("  2 - LAB        (lascucmpl01.ahs.int)")
+    choice = input("Enter choice (1 or 2): ").strip()
+    if choice == "1":
+        return PROD_CUCM_IP, "PRODUCTION"
+    return LAB_CUCM_IP, "LAB"
+
+
+def choose_dn_prefix():
+    print("\nSelect Directory Number Type:")
+    print("  1 - Recruiter (469)")
+    print("  2 - General FTE (214)")
+    choice = input("Enter choice (1 or 2): ").strip()
+    if choice == "1":
+        return "469", "Recruiter"
+    return "214", "General FTE"
+
+
+def get_user_details(session, cucm_ip, username):
     soap = f"""<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:axl="http://www.cisco.com/AXL/API/15.0">
    <soapenv:Header/>
@@ -73,7 +95,7 @@ def get_user_details(session, username):
    </soapenv:Body>
 </soapenv:Envelope>"""
 
-    response = axl_post(session, LAB_CUCM_IP, soap)
+    response = axl_post(session, cucm_ip, soap)
     if response.status_code != 200:
         raise RuntimeError(f"getUser failed with HTTP {response.status_code}: {response.text[:1000]}")
 
@@ -104,7 +126,7 @@ def get_user_details(session, username):
     }
 
 
-def list_available_dns(session, prefix):
+def list_available_dns(session, cucm_ip, prefix):
     soap = f"""<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:axl="http://www.cisco.com/AXL/API/15.0">
    <soapenv:Body>
@@ -121,7 +143,7 @@ def list_available_dns(session, prefix):
    </soapenv:Body>
 </soapenv:Envelope>"""
 
-    response = axl_post(session, LAB_CUCM_IP, soap)
+    response = axl_post(session, cucm_ip, soap)
     if response.status_code != 200:
         raise RuntimeError(f"listLine for prefix {prefix} failed with HTTP {response.status_code}: {response.text[:1000]}")
 
@@ -135,33 +157,32 @@ def list_available_dns(session, prefix):
         partition = find_first_text(elem, [["routePartitionName"]])
         active = find_first_text(elem, [["active"]]).strip().lower()
 
-        # In CUCM responses active can be false/f/blank; only explicit true values are treated as active.
         is_inactive = active not in {"true", "t", "1", "yes"}
-        if pattern and partition == "ENT_DEVICE_PT" and is_inactive:
+        if pattern and partition == ROUTE_PARTITION and is_inactive:
             candidates.append(pattern)
 
     return sorted(set(candidates))
 
 
-def is_dn_unassigned(session, pattern, route_partition):
+def is_dn_unassigned(session, cucm_ip, pattern, route_partition):
     soap = f"""<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:axl="http://www.cisco.com/AXL/API/15.0">
    <soapenv:Body>
       <axl:getLine>
          <pattern>{escape(pattern)}</pattern>
          <routePartitionName>{escape(route_partition)}</routePartitionName>
-            <returnedTags>
-                <pattern/>
-                <routePartitionName/>
-                <associatedDevices>
-                    <device/>
-                </associatedDevices>
-            </returnedTags>
+         <returnedTags>
+            <pattern/>
+            <routePartitionName/>
+            <associatedDevices>
+               <device/>
+            </associatedDevices>
+         </returnedTags>
       </axl:getLine>
    </soapenv:Body>
 </soapenv:Envelope>"""
 
-    response = axl_post(session, LAB_CUCM_IP, soap)
+    response = axl_post(session, cucm_ip, soap)
     if response.status_code != 200:
         return False
 
@@ -170,22 +191,19 @@ def is_dn_unassigned(session, pattern, route_partition):
     except Exception:
         return False
 
-    # Any associatedDevices/device means the DN is already in use.
     for elem in root.iter():
-        if strip_ns(elem.tag) == "device":
-            if elem.text and elem.text.strip():
-                return False
+        if strip_ns(elem.tag) == "device" and elem.text and elem.text.strip():
+            return False
 
     return True
 
 
-def choose_available_dn(session):
-    for prefix in ["214", "469"]:
-        candidates = list_available_dns(session, prefix)
-        for candidate in candidates:
-            if is_dn_unassigned(session, candidate, "ENT_DEVICE_PT"):
-                return candidate
-    raise RuntimeError("No available inactive DN found in ENT_DEVICE_PT starting with 214 or 469.")
+def choose_available_dn(session, cucm_ip, prefix):
+    candidates = list_available_dns(session, cucm_ip, prefix)
+    for candidate in candidates:
+        if is_dn_unassigned(session, cucm_ip, candidate, ROUTE_PARTITION):
+            return candidate
+    raise RuntimeError(f"No available inactive DN found in {ROUTE_PARTITION} starting with {prefix}.")
 
 
 def build_add_phone_soap(template, user_details, phone_name, description, new_dn, display_name):
@@ -232,21 +250,35 @@ def build_add_phone_soap(template, user_details, phone_name, description, new_dn
                   <label>{escape(new_dn)}</label>
                   <display>{escape(display_name)}</display>
                   <displayAscii>{escape(display_name)}</displayAscii>
-                        <alertingName>{escape(display_name)}</alertingName>
-                        <asciiAlertingName>{escape(display_name)}</asciiAlertingName>
-                        <e164Mask>{escape(new_dn)}</e164Mask>
-                        <callInfoDisplay>
-                            <callerName>true</callerName>
-                            <callerNumber>true</callerNumber>
-                            <redirectedNumber>true</redirectedNumber>
-                            <dialedNumber>true</dialedNumber>
-                        </callInfoDisplay>
+                  <alertingName>{escape(display_name)}</alertingName>
+                  <asciiAlertingName>{escape(display_name)}</asciiAlertingName>
+                  <e164Mask>{escape(new_dn)}</e164Mask>
+                  <callInfoDisplay>
+                     <callerName>true</callerName>
+                     <callerNumber>true</callerNumber>
+                     <redirectedNumber>true</redirectedNumber>
+                     <dialedNumber>true</dialedNumber>
+                  </callInfoDisplay>
                   <maxNumCalls>{escape(template['lineMaxNumCalls'])}</maxNumCalls>
                   <busyTrigger>{escape(template['lineBusyTrigger'])}</busyTrigger>
                </line>
             </lines>
          </phone>
       </axl:addPhone>
+   </soapenv:Body>
+</soapenv:Envelope>"""
+
+
+def build_update_line_soap(new_dn, route_partition, display_name):
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:axl="http://www.cisco.com/AXL/API/15.0">
+   <soapenv:Body>
+      <axl:updateLine>
+         <pattern>{escape(new_dn)}</pattern>
+         <routePartitionName>{escape(route_partition)}</routePartitionName>
+         <alertingName>{escape(display_name)}</alertingName>
+         <asciiAlertingName>{escape(display_name)}</asciiAlertingName>
+      </axl:updateLine>
    </soapenv:Body>
 </soapenv:Envelope>"""
 
@@ -268,52 +300,36 @@ def build_update_user_soap(user_details, phone_name, new_dn, route_partition, li
          <associatedDevices>
 {device_xml}
          </associatedDevices>
-            <associatedGroups>
-                <userGroup>
-                    <name>AMN User</name>
-                </userGroup>
-            </associatedGroups>
+         <associatedGroups>
+            <userGroup>
+               <name>AMN User</name>
+            </userGroup>
+         </associatedGroups>
          <primaryExtension>
             <pattern>{escape(new_dn)}</pattern>
             <routePartitionName>{escape(route_partition)}</routePartitionName>
          </primaryExtension>
-            <lineAppearanceAssociationForPresences>
-                <lineAppearanceAssociationForPresence>
-                    <laapAssociate>t</laapAssociate>
-                    <laapProductType>Cisco Unified Client Services Framework</laapProductType>
-                    <laapDeviceName>{escape(phone_name)}</laapDeviceName>
-                    <laapDirectory>{escape(new_dn)}</laapDirectory>
-                    <laapPartition>{escape(route_partition)}</laapPartition>
-                    <laapDescription>{escape(line_description)}</laapDescription>
-                </lineAppearanceAssociationForPresence>
-            </lineAppearanceAssociationForPresences>
-            <homeCluster>true</homeCluster>
-            <serviceProfile>Service_Profile_IM</serviceProfile>
+         <lineAppearanceAssociationForPresences>
+            <lineAppearanceAssociationForPresence>
+               <laapAssociate>t</laapAssociate>
+               <laapProductType>Cisco Unified Client Services Framework</laapProductType>
+               <laapDeviceName>{escape(phone_name)}</laapDeviceName>
+               <laapDirectory>{escape(new_dn)}</laapDirectory>
+               <laapPartition>{escape(route_partition)}</laapPartition>
+               <laapDescription>{escape(line_description)}</laapDescription>
+            </lineAppearanceAssociationForPresence>
+         </lineAppearanceAssociationForPresences>
+         <homeCluster>true</homeCluster>
+         <serviceProfile>Service_Profile_IM</serviceProfile>
       </axl:updateUser>
    </soapenv:Body>
 </soapenv:Envelope>"""
 
 
-def build_update_line_soap(new_dn, route_partition, display_name):
-     return f"""<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:axl="http://www.cisco.com/AXL/API/15.0">
-    <soapenv:Body>
-        <axl:updateLine>
-            <pattern>{escape(new_dn)}</pattern>
-            <routePartitionName>{escape(route_partition)}</routePartitionName>
-            <alertingName>{escape(display_name)}</alertingName>
-            <asciiAlertingName>{escape(display_name)}</asciiAlertingName>
-        </axl:updateLine>
-    </soapenv:Body>
-</soapenv:Envelope>"""
-
-
 def main():
     print("==================================================")
-    print(" CUCM AXL - Build LAB CSF Phone From Static Template")
+    print(" CUCM AXL - Build CSF Phone From Static Template")
     print("==================================================\n")
-    print("This version is LAB-only and uses a static phone template file.")
-    print(f"Target CUCM: {LAB_CUCM_IP}\n")
 
     template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), TEMPLATE_FILE)
     if not os.path.exists(template_path):
@@ -322,105 +338,121 @@ def main():
 
     template = load_template(template_path)
 
+    cucm_ip, env_name = choose_environment()
+    print(f"Using {env_name} CUCM: {cucm_ip}")
+
     cucm_user = input("Enter CUCM Username: ").strip()
     cucm_pass = getpass.getpass("Enter CUCM Password: ")
-    target_user = input("Enter target End User userid (example: Sarah.Paris): ").strip()
-    dry_run = confirm_yes_no("Run in dry-run mode (no changes will be made)?", default_yes=True)
-
-    if not target_user:
-        print("No target userid provided. Exiting.")
-        return
 
     session = requests.Session()
     session.verify = False
     session.auth = HTTPBasicAuth(cucm_user, cucm_pass)
 
-    current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    log_filename = os.path.join(OUTPUT_DIR, f"build_user_csf_phone_{target_user}_{current_time}.csv")
+    while True:
+        dn_prefix, dn_type_name = choose_dn_prefix()
+        print(f"Using DN type: {dn_type_name} ({dn_prefix}xxxxxxx)")
 
-    with open(log_filename, "w", newline="", encoding="utf-8") as logfile:
-        log_writer = csv.writer(logfile)
-        log_writer.writerow(["Step", "Status", "Details"])
+        target_user = input("Enter target End User userid (example: Sarah.Paris): ").strip()
+        dry_run = confirm_yes_no("Run in dry-run mode (no changes will be made)?", default_yes=True)
 
-        try:
-            user_details = get_user_details(session, target_user)
-            full_name = " ".join(part for part in [user_details["firstName"], user_details["lastName"]] if part).strip()
-            display_name = full_name or user_details["displayName"] or user_details["userid"]
-            new_dn = choose_available_dn(session)
-            phone_name = f"{template['deviceNamePrefix']}{new_dn}"
-            description = f"CSF {display_name}".strip()
+        if not target_user:
+            print("No target userid provided. Returning to main menu.")
+            return
 
-            print(f"Found user: {user_details['userid']} | {display_name}")
-            print(f"Selected DN: {new_dn}")
-            print(f"New phone name: {phone_name}")
-            print(f"Dry-run mode: {'ON' if dry_run else 'OFF'}")
+        current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        log_filename = os.path.join(OUTPUT_DIR, f"build_user_csf_phone_{target_user}_{current_time}.csv")
 
-            log_writer.writerow(["Lookup User", "Success", f"Found user {user_details['userid']} ({display_name})"])
-            log_writer.writerow(["Select DN", "Success", f"Using available DN {new_dn}"])
+        run_success = False
 
-            add_phone_soap = build_add_phone_soap(template, user_details, phone_name, description, new_dn, display_name)
-            update_line_soap = build_update_line_soap(new_dn, template["routePartitionName"], display_name)
-            update_user_soap = build_update_user_soap(
-                user_details,
-                phone_name,
-                new_dn,
-                template["routePartitionName"],
-                description,
-            )
+        with open(log_filename, "w", newline="", encoding="utf-8") as logfile:
+            log_writer = csv.writer(logfile)
+            log_writer.writerow(["Step", "Status", "Details"])
 
-            if dry_run:
-                print("\n--- Dry Run Summary ---")
-                print(f"User        : {user_details['userid']}")
-                print(f"Display Name: {display_name}")
-                print(f"New DN      : {new_dn}")
-                print(f"Phone Name  : {phone_name}")
-                print(f"Description : {description}")
-                print("\n--- addPhone SOAP ---")
-                print(add_phone_soap)
-                print("\n--- updateLine SOAP ---")
-                print(update_line_soap)
-                print("\n--- updateUser SOAP ---")
-                print(update_user_soap)
-                log_writer.writerow(["Dry Run", "Success", f"Prepared addPhone, updateLine, and updateUser payloads for {user_details['userid']} using DN {new_dn}"])
-                print(f"\nDry run complete! Results logged to: {log_filename}")
-                return
+            try:
+                user_details = get_user_details(session, cucm_ip, target_user)
+                full_name = " ".join(part for part in [user_details["firstName"], user_details["lastName"]] if part).strip()
+                display_name = full_name or user_details["displayName"] or user_details["userid"]
+                new_dn = choose_available_dn(session, cucm_ip, dn_prefix)
+                phone_name = f"{template['deviceNamePrefix']}{new_dn}"
+                description = f"CSF {display_name}".strip()
 
-            add_response = axl_post(session, LAB_CUCM_IP, add_phone_soap)
-            if add_response.status_code != 200:
-                log_writer.writerow(["Add Phone", "Failed", f"HTTP {add_response.status_code}: {add_response.text[:1000]}"])
-                print(f"✗ Add Phone failed. HTTP {add_response.status_code}")
-                print(add_response.text[:2000])
-                return
+                print(f"Found user: {user_details['userid']} | {display_name}")
+                print(f"Selected DN: {new_dn}")
+                print(f"New phone name: {phone_name}")
+                print(f"Dry-run mode: {'ON' if dry_run else 'OFF'}")
 
-            log_writer.writerow(["Add Phone", "Success", f"Created {phone_name} with DN {new_dn}"])
-            print(f"✓ Added phone {phone_name}")
+                log_writer.writerow(["Environment", "Success", f"{env_name} ({cucm_ip})"])
+                log_writer.writerow(["DN Type", "Success", f"{dn_type_name} ({dn_prefix})"])
+                log_writer.writerow(["Lookup User", "Success", f"Found user {user_details['userid']} ({display_name})"])
+                log_writer.writerow(["Select DN", "Success", f"Using available DN {new_dn}"])
 
-            line_response = axl_post(session, LAB_CUCM_IP, update_line_soap)
-            if line_response.status_code != 200:
-                log_writer.writerow(["Update Line", "Failed", f"HTTP {line_response.status_code}: {line_response.text[:1000]}"])
-                print(f"✗ Update Line failed. HTTP {line_response.status_code}")
-                print(line_response.text[:2000])
-                return
+                add_phone_soap = build_add_phone_soap(template, user_details, phone_name, description, new_dn, display_name)
+                update_line_soap = build_update_line_soap(new_dn, template["routePartitionName"], display_name)
+                update_user_soap = build_update_user_soap(user_details, phone_name, new_dn, template["routePartitionName"], description)
 
-            log_writer.writerow(["Update Line", "Success", f"Updated alerting names on DN {new_dn}"])
-            print(f"✓ Updated line alerting fields for {new_dn}")
+                if dry_run:
+                    print("\n--- Dry Run Summary ---")
+                    print(f"Environment : {env_name} ({cucm_ip})")
+                    print(f"DN Type     : {dn_type_name} ({dn_prefix})")
+                    print(f"User        : {user_details['userid']}")
+                    print(f"Display Name: {display_name}")
+                    print(f"New DN      : {new_dn}")
+                    print(f"Phone Name  : {phone_name}")
+                    print(f"Description : {description}")
+                    print("\n--- addPhone SOAP ---")
+                    print(add_phone_soap)
+                    print("\n--- updateLine SOAP ---")
+                    print(update_line_soap)
+                    print("\n--- updateUser SOAP ---")
+                    print(update_user_soap)
+                    log_writer.writerow(["Dry Run", "Success", f"Prepared addPhone, updateLine, and updateUser payloads for {user_details['userid']} using DN {new_dn}"])
+                    print(f"\nDry run complete! Results logged to: {log_filename}")
+                    run_success = True
+                else:
+                    add_response = axl_post(session, cucm_ip, add_phone_soap)
+                    if add_response.status_code != 200:
+                        log_writer.writerow(["Add Phone", "Failed", f"HTTP {add_response.status_code}: {add_response.text[:1000]}"])
+                        print(f"✗ Add Phone failed. HTTP {add_response.status_code}")
+                        print(add_response.text[:2000])
+                    else:
+                        log_writer.writerow(["Add Phone", "Success", f"Created {phone_name} with DN {new_dn}"])
+                        print(f"✓ Added phone {phone_name}")
 
-            update_response = axl_post(session, LAB_CUCM_IP, update_user_soap)
-            if update_response.status_code != 200:
-                log_writer.writerow(["Update User", "Failed", f"HTTP {update_response.status_code}: {update_response.text[:1000]}"])
-                print(f"✗ Update User failed. HTTP {update_response.status_code}")
-                print(update_response.text[:2000])
-                return
+                        line_response = axl_post(session, cucm_ip, update_line_soap)
+                        if line_response.status_code != 200:
+                            log_writer.writerow(["Update Line", "Failed", f"HTTP {line_response.status_code}: {line_response.text[:1000]}"])
+                            print(f"✗ Update Line failed. HTTP {line_response.status_code}")
+                            print(line_response.text[:2000])
+                        else:
+                            log_writer.writerow(["Update Line", "Success", f"Updated alerting names on DN {new_dn}"])
+                            print(f"✓ Updated line alerting fields for {new_dn}")
 
-            log_writer.writerow(["Update User", "Success", f"Updated {user_details['userid']} with phone {phone_name} and DN {new_dn}"])
-            print(f"✓ Updated end user {user_details['userid']}")
-            print(f"\nScript complete! Results logged to: {log_filename}")
+                            update_response = axl_post(session, cucm_ip, update_user_soap)
+                            if update_response.status_code != 200:
+                                log_writer.writerow(["Update User", "Failed", f"HTTP {update_response.status_code}: {update_response.text[:1000]}"])
+                                print(f"✗ Update User failed. HTTP {update_response.status_code}")
+                                print(update_response.text[:2000])
+                            else:
+                                log_writer.writerow(["Update User", "Success", f"Updated {user_details['userid']} with phone {phone_name} and DN {new_dn}"])
+                                print(f"✓ Updated end user {user_details['userid']}")
+                                print(f"\nScript complete! Results logged to: {log_filename}")
+                                run_success = True
 
-        except Exception as e:
-            log_writer.writerow(["Script", "Error", str(e)])
-            print(f"✗ Script error: {e}")
-            print(f"Results logged to: {log_filename}")
+            except Exception as e:
+                log_writer.writerow(["Script", "Error", str(e)])
+                print(f"✗ Script error: {e}")
+                print(f"Results logged to: {log_filename}")
+
+        if not run_success:
+            return
+
+        print("\nWhat would you like to do next?")
+        print("  1 - Run another Build CSF")
+        print("  0 - Return to main menu")
+        next_choice = input("Enter choice (0 or 1): ").strip()
+        if next_choice != "1":
+            return
 
 
 if __name__ == "__main__":
