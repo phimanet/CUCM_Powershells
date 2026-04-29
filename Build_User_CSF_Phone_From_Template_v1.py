@@ -150,6 +150,13 @@ def is_dn_unassigned(session, pattern, route_partition):
       <axl:getLine>
          <pattern>{escape(pattern)}</pattern>
          <routePartitionName>{escape(route_partition)}</routePartitionName>
+            <returnedTags>
+                <pattern/>
+                <routePartitionName/>
+                <associatedDevices>
+                    <device/>
+                </associatedDevices>
+            </returnedTags>
       </axl:getLine>
    </soapenv:Body>
 </soapenv:Envelope>"""
@@ -163,7 +170,7 @@ def is_dn_unassigned(session, pattern, route_partition):
     except Exception:
         return False
 
-    # Any associatedDevices/device means the DN is in use.
+    # Any associatedDevices/device means the DN is already in use.
     for elem in root.iter():
         if strip_ns(elem.tag) == "device":
             if elem.text and elem.text.strip():
@@ -225,6 +232,15 @@ def build_add_phone_soap(template, user_details, phone_name, description, new_dn
                   <label>{escape(new_dn)}</label>
                   <display>{escape(display_name)}</display>
                   <displayAscii>{escape(display_name)}</displayAscii>
+                        <alertingName>{escape(display_name)}</alertingName>
+                        <asciiAlertingName>{escape(display_name)}</asciiAlertingName>
+                        <e164Mask>{escape(new_dn)}</e164Mask>
+                        <callInfoDisplay>
+                            <callerName>true</callerName>
+                            <callerNumber>true</callerNumber>
+                            <redirectedNumber>true</redirectedNumber>
+                            <dialedNumber>true</dialedNumber>
+                        </callInfoDisplay>
                   <maxNumCalls>{escape(template['lineMaxNumCalls'])}</maxNumCalls>
                   <busyTrigger>{escape(template['lineBusyTrigger'])}</busyTrigger>
                </line>
@@ -235,7 +251,7 @@ def build_add_phone_soap(template, user_details, phone_name, description, new_dn
 </soapenv:Envelope>"""
 
 
-def build_update_user_soap(user_details, phone_name, new_dn, route_partition):
+def build_update_user_soap(user_details, phone_name, new_dn, route_partition, line_description):
     associated_devices = list(user_details["associatedDevices"])
     if phone_name not in associated_devices:
         associated_devices.append(phone_name)
@@ -252,14 +268,43 @@ def build_update_user_soap(user_details, phone_name, new_dn, route_partition):
          <associatedDevices>
 {device_xml}
          </associatedDevices>
+            <associatedGroups>
+                <userGroup>
+                    <name>AMN User</name>
+                </userGroup>
+            </associatedGroups>
          <primaryExtension>
             <pattern>{escape(new_dn)}</pattern>
             <routePartitionName>{escape(route_partition)}</routePartitionName>
          </primaryExtension>
-         <telephoneNumber>{escape(new_dn)}</telephoneNumber>
-         <selfService>{escape(new_dn)}</selfService>
+            <lineAppearanceAssociationForPresences>
+                <lineAppearanceAssociationForPresence>
+                    <laapAssociate>t</laapAssociate>
+                    <laapProductType>Cisco Unified Client Services Framework</laapProductType>
+                    <laapDeviceName>{escape(phone_name)}</laapDeviceName>
+                    <laapDirectory>{escape(new_dn)}</laapDirectory>
+                    <laapPartition>{escape(route_partition)}</laapPartition>
+                    <laapDescription>{escape(line_description)}</laapDescription>
+                </lineAppearanceAssociationForPresence>
+            </lineAppearanceAssociationForPresences>
+            <homeCluster>true</homeCluster>
+            <serviceProfile>Service_Profile_IM</serviceProfile>
       </axl:updateUser>
    </soapenv:Body>
+</soapenv:Envelope>"""
+
+
+def build_update_line_soap(new_dn, route_partition, display_name):
+     return f"""<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:axl="http://www.cisco.com/AXL/API/15.0">
+    <soapenv:Body>
+        <axl:updateLine>
+            <pattern>{escape(new_dn)}</pattern>
+            <routePartitionName>{escape(route_partition)}</routePartitionName>
+            <alertingName>{escape(display_name)}</alertingName>
+            <asciiAlertingName>{escape(display_name)}</asciiAlertingName>
+        </axl:updateLine>
+    </soapenv:Body>
 </soapenv:Envelope>"""
 
 
@@ -315,7 +360,14 @@ def main():
             log_writer.writerow(["Select DN", "Success", f"Using available DN {new_dn}"])
 
             add_phone_soap = build_add_phone_soap(template, user_details, phone_name, description, new_dn, display_name)
-            update_user_soap = build_update_user_soap(user_details, phone_name, new_dn, template["routePartitionName"])
+            update_line_soap = build_update_line_soap(new_dn, template["routePartitionName"], display_name)
+            update_user_soap = build_update_user_soap(
+                user_details,
+                phone_name,
+                new_dn,
+                template["routePartitionName"],
+                description,
+            )
 
             if dry_run:
                 print("\n--- Dry Run Summary ---")
@@ -326,9 +378,11 @@ def main():
                 print(f"Description : {description}")
                 print("\n--- addPhone SOAP ---")
                 print(add_phone_soap)
+                print("\n--- updateLine SOAP ---")
+                print(update_line_soap)
                 print("\n--- updateUser SOAP ---")
                 print(update_user_soap)
-                log_writer.writerow(["Dry Run", "Success", f"Prepared addPhone and updateUser payloads for {user_details['userid']} using DN {new_dn}"])
+                log_writer.writerow(["Dry Run", "Success", f"Prepared addPhone, updateLine, and updateUser payloads for {user_details['userid']} using DN {new_dn}"])
                 print(f"\nDry run complete! Results logged to: {log_filename}")
                 return
 
@@ -341,6 +395,16 @@ def main():
 
             log_writer.writerow(["Add Phone", "Success", f"Created {phone_name} with DN {new_dn}"])
             print(f"✓ Added phone {phone_name}")
+
+            line_response = axl_post(session, LAB_CUCM_IP, update_line_soap)
+            if line_response.status_code != 200:
+                log_writer.writerow(["Update Line", "Failed", f"HTTP {line_response.status_code}: {line_response.text[:1000]}"])
+                print(f"✗ Update Line failed. HTTP {line_response.status_code}")
+                print(line_response.text[:2000])
+                return
+
+            log_writer.writerow(["Update Line", "Success", f"Updated alerting names on DN {new_dn}"])
+            print(f"✓ Updated line alerting fields for {new_dn}")
 
             update_response = axl_post(session, LAB_CUCM_IP, update_user_soap)
             if update_response.status_code != 200:
