@@ -81,12 +81,15 @@ def choose_dn_prefix():
     print("\nSelect Directory Number Type:")
     print("  1 - Recruiter (469)")
     print("  2 - General FTE (214)")
+    print("  3 - Strike (945)")
     print("  0 - Return to main menu")
-    choice = input("Enter choice (0, 1, or 2): ").strip()
+    choice = input("Enter choice (0, 1, 2, or 3): ").strip()
     if choice == "0":
         return None, None
     if choice == "1":
         return "469", "Recruiter"
+    if choice == "3":
+        return "945", "Strike"
     return "214", "General FTE"
 
 
@@ -363,7 +366,6 @@ def main():
         print(f"Using DN type: {dn_type_name} ({dn_prefix}xxxxxxx)")
 
         target_user = input("Enter target End User userid (example: Sarah.Paris): ").strip()
-        dry_run = confirm_yes_no("Run in dry-run mode (no changes will be made)?", default_yes=True)
 
         if not target_user:
             print("No target userid provided. Returning to main menu.")
@@ -390,7 +392,6 @@ def main():
                 print(f"Found user: {user_details['userid']} | {display_name}")
                 print(f"Selected DN: {new_dn}")
                 print(f"New phone name: {phone_name}")
-                print(f"Dry-run mode: {'ON' if dry_run else 'OFF'}")
 
                 log_writer.writerow(["Environment", "Success", f"{env_name} ({cucm_ip})"])
                 log_writer.writerow(["DN Type", "Success", f"{dn_type_name} ({dn_prefix})"])
@@ -401,53 +402,34 @@ def main():
                 update_line_soap = build_update_line_soap(new_dn, template["routePartitionName"], display_name)
                 update_user_soap = build_update_user_soap(user_details, phone_name, new_dn, template["routePartitionName"], description)
 
-                if dry_run:
-                    print("\n--- Dry Run Summary ---")
-                    print(f"Environment : {env_name} ({cucm_ip})")
-                    print(f"DN Type     : {dn_type_name} ({dn_prefix})")
-                    print(f"User        : {user_details['userid']}")
-                    print(f"Display Name: {display_name}")
-                    print(f"New DN      : {new_dn}")
-                    print(f"Phone Name  : {phone_name}")
-                    print(f"Description : {description}")
-                    print("\n--- addPhone SOAP ---")
-                    print(add_phone_soap)
-                    print("\n--- updateLine SOAP ---")
-                    print(update_line_soap)
-                    print("\n--- updateUser SOAP ---")
-                    print(update_user_soap)
-                    log_writer.writerow(["Dry Run", "Success", f"Prepared addPhone, updateLine, and updateUser payloads for {user_details['userid']} using DN {new_dn}"])
-                    print(f"\nDry run complete! Results logged to: {log_filename}")
-                    run_success = True
+                add_response = axl_post(session, cucm_ip, add_phone_soap)
+                if add_response.status_code != 200:
+                    log_writer.writerow(["Add Phone", "Failed", f"HTTP {add_response.status_code}: {add_response.text[:1000]}"])
+                    print(f"✗ Add Phone failed. HTTP {add_response.status_code}")
+                    print(add_response.text[:2000])
                 else:
-                    add_response = axl_post(session, cucm_ip, add_phone_soap)
-                    if add_response.status_code != 200:
-                        log_writer.writerow(["Add Phone", "Failed", f"HTTP {add_response.status_code}: {add_response.text[:1000]}"])
-                        print(f"✗ Add Phone failed. HTTP {add_response.status_code}")
-                        print(add_response.text[:2000])
+                    log_writer.writerow(["Add Phone", "Success", f"Created {phone_name} with DN {new_dn}"])
+                    print(f"✓ Added phone {phone_name}")
+
+                    line_response = axl_post(session, cucm_ip, update_line_soap)
+                    if line_response.status_code != 200:
+                        log_writer.writerow(["Update Line", "Failed", f"HTTP {line_response.status_code}: {line_response.text[:1000]}"])
+                        print(f"✗ Update Line failed. HTTP {line_response.status_code}")
+                        print(line_response.text[:2000])
                     else:
-                        log_writer.writerow(["Add Phone", "Success", f"Created {phone_name} with DN {new_dn}"])
-                        print(f"✓ Added phone {phone_name}")
+                        log_writer.writerow(["Update Line", "Success", f"Updated alerting names on DN {new_dn}"])
+                        print(f"✓ Updated line alerting fields for {new_dn}")
 
-                        line_response = axl_post(session, cucm_ip, update_line_soap)
-                        if line_response.status_code != 200:
-                            log_writer.writerow(["Update Line", "Failed", f"HTTP {line_response.status_code}: {line_response.text[:1000]}"])
-                            print(f"✗ Update Line failed. HTTP {line_response.status_code}")
-                            print(line_response.text[:2000])
+                        update_response = axl_post(session, cucm_ip, update_user_soap)
+                        if update_response.status_code != 200:
+                            log_writer.writerow(["Update User", "Failed", f"HTTP {update_response.status_code}: {update_response.text[:1000]}"])
+                            print(f"✗ Update User failed. HTTP {update_response.status_code}")
+                            print(update_response.text[:2000])
                         else:
-                            log_writer.writerow(["Update Line", "Success", f"Updated alerting names on DN {new_dn}"])
-                            print(f"✓ Updated line alerting fields for {new_dn}")
-
-                            update_response = axl_post(session, cucm_ip, update_user_soap)
-                            if update_response.status_code != 200:
-                                log_writer.writerow(["Update User", "Failed", f"HTTP {update_response.status_code}: {update_response.text[:1000]}"])
-                                print(f"✗ Update User failed. HTTP {update_response.status_code}")
-                                print(update_response.text[:2000])
-                            else:
-                                log_writer.writerow(["Update User", "Success", f"Updated {user_details['userid']} with phone {phone_name} and DN {new_dn}"])
-                                print(f"✓ Updated end user {user_details['userid']}")
-                                print(f"\nScript complete! Results logged to: {log_filename}")
-                                run_success = True
+                            log_writer.writerow(["Update User", "Success", f"Updated {user_details['userid']} with phone {phone_name} and DN {new_dn}"])
+                            print(f"✓ Updated end user {user_details['userid']}")
+                            print(f"\nScript complete! Results logged to: {log_filename}")
+                            run_success = True
 
             except Exception as e:
                 err_msg = str(e)
