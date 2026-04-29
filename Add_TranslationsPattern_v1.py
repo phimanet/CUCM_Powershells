@@ -3,6 +3,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 import csv
 import getpass
+import os
 import datetime
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -30,7 +31,9 @@ input_csv = 'translation_patterns_insert_template.csv'
 
 # Generate the dynamic filename for the log
 current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-log_filename = f"translation_add_log_{current_time}.csv"
+output_dir = 'output_logs'
+os.makedirs(output_dir, exist_ok=True)
+log_filename = os.path.join(output_dir, f"translation_add_log_{current_time}.csv")
 
 with open(input_csv, 'r', encoding='utf-8-sig') as infile, \
      open(log_filename, 'w', newline='', encoding='utf-8') as logfile:

@@ -3,6 +3,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 import csv
 import getpass
+import os
 import datetime
 import xml.etree.ElementTree as ET
 
@@ -30,7 +31,9 @@ else:
 
 # Generate the dynamic filename
 current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-log_filename = f"extract_translation_patterns_{current_time}.csv"
+output_dir = 'output_logs'
+os.makedirs(output_dir, exist_ok=True)
+log_filename = os.path.join(output_dir, f"extract_translation_patterns_{current_time}.csv")
 
 with open(log_filename, 'w', newline='', encoding='utf-8') as logfile:
     

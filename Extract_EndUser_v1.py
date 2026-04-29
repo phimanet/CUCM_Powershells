@@ -3,6 +3,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 import csv
 import getpass
+import os
 import datetime
 import xml.etree.ElementTree as ET
 
@@ -278,7 +279,9 @@ def main():
     # Step 5: Write to CSV (Field, Value)
     # -------------------------
     current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_file = f"enduser_export_{userid}_{current_time}.csv"
+    output_dir = "output_logs"
+    os.makedirs(output_dir, exist_ok=True)
+    out_file = os.path.join(output_dir, f"enduser_export_{userid}_{current_time}.csv")
 
     with open(out_file, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
