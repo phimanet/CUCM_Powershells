@@ -1,0 +1,6 @@
+Step,Status,Details
+Connect,Success,Unity server lascutypl01.ahs.int
+Create User,Fallback,LDAP import API unavailable; created local Unity user Vijiha.Barner and will require manual LDAP integration
+LDAP Integration,Failed,Unity created the mailbox but LDAP integration is still disabled after update. Verify LDAP user ID is correct and that LDAP import is enabled on this Unity cluster.
+LDAP Integration State,Info,Alias=Vijiha.Barner; IsLdapIntegrated=None; LdapCcmUserId=Vijiha.Barner
+Script,Error,Unity created the mailbox but LDAP integration is still disabled after update. Verify LDAP user ID is correct and that LDAP import is enabled on this Unity cluster.

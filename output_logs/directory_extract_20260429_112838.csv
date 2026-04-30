@@ -1,0 +1,2 @@
+Pattern,Status,Description,Usage,Route Partition,Voicemail Profile,Active,Associated Device Count,Associated Devices,Details
+2145551212,Found,CNAM:AMNHealthcare 4695551212 Automation USE ONLY,Device,ENT_DEVICE_PT,VM_Profile_10Digits,false,0,,Success

@@ -1,0 +1,8 @@
+Step,Status,Details
+Environment,Success,LAB (lascucmpl01.ahs.int)
+DN Type,Success,General FTE (214)
+Lookup User,Success,Found user Deann.Smith (Deann Smith)
+Select DN,Success,Using available DN 2145551212
+Add Phone,Success,Created CSF2145551212 with DN 2145551212
+Update Line,Success,Updated alerting names on DN 2145551212
+Update User,Success,Updated Deann.Smith with phone CSF2145551212 and DN 2145551212

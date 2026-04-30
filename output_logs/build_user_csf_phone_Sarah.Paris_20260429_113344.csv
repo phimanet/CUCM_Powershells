@@ -1,0 +1,4 @@
+Step,Status,Details
+Lookup User,Success,Found user Sarah.Paris (Sarah Paris)
+Select DN,Success,Using available DN 2145551212
+Dry Run,Success,Prepared addPhone and updateUser payloads for Sarah.Paris using DN 2145551212

@@ -1,0 +1,9 @@
+Step,Status,Details
+Lookup User,Success,Found Angela.Billet (Angela Billet)
+Update User,Success,"Rolled back End User entries for Angela.Billet: removed device CSF4695551212, removed CSF line presence mapping; no fallback primary extension found"
+Verify End User Primary,Warning,"Primary extension still points to removed DN 4695551212/ENT_DEVICE_PT. If this is the user's only line, clear/adjust primary extension manually in CUCM End User."
+Remove Phone,Success,Removed phone CSF4695551212
+Delete Unity Mailbox,Success,Deleted Unity mailbox alias Angela.Billet on LASCUTYPL01.ahs.int
+Update Line Inactive,Info,Description sanitized for CUCM constraints: 'INACTIVE - Available - prior user Angela.Billet -'
+Update Line Inactive,Success,Marked 4695551212/ENT_DEVICE_PT inactive and reusable
+Verify Line,Success,active=false; associatedDevices=0; description=INACTIVE - Available - prior user Angela.Billet -

@@ -1,0 +1,5 @@
+Step,Status,Details
+Lookup User,Success,Found user Sarah.Paris (Sarah Paris)
+Select DN,Success,Using available DN 2145551212
+Add Phone,Success,Created CSF2145551212 with DN 2145551212
+Update User,Success,Updated Sarah.Paris with phone CSF2145551212 and DN 2145551212

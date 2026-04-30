@@ -1,0 +1,8 @@
+Step,Status,Details
+Environment,Success,LAB (lascucmpl01.ahs.int)
+DN Type,Success,Recruiter (469)
+Lookup User,Success,Found user Devonna.Smith (Devonna Smith)
+Select DN,Success,Using available DN 4695551212
+Add Phone,Success,Created CSF4695551212 with DN 4695551212
+Update Line,Success,Updated alerting names on DN 4695551212
+Update User,Success,Updated Devonna.Smith with phone CSF4695551212 and DN 4695551212

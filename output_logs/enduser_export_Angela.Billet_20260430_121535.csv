@@ -1,0 +1,41 @@
+Field,Value
+user@uuid,{D57D6833-B0D2-94A5-DDDA-59C3B73E87D1}
+user.firstName,Angela
+user.displayName,Angela Billet
+user.lastName,Billet
+user.userid,Angela.Billet
+user.mailid,Angela.Billet@amnhealthcare.com
+user.department,RCS
+user.manager,Sol.Soto-Gonzalez
+user.enableCti,true
+user.presenceGroupName@uuid,{AD243D17-98B4-4118-8FEB-5FF2E1B781AC}
+user.presenceGroupName,Standard Presence group
+user.enableMobility,false
+user.enableMobileVoiceAccess,false
+user.maxDeskPickupWaitTime,10000
+user.remoteDestinationLimit,4
+user.passwordCredentials.pwdCredPolicyName,Default Credential Policy
+user.passwordCredentials.pwdCredUserCantChange,false
+user.passwordCredentials.pwdCredUserMustChange,true
+user.passwordCredentials.pwdCredDoesNotExpire,false
+user.passwordCredentials.pwdCredTimeChanged,"March 05, 2025 07:05:07 PST"
+user.passwordCredentials.pwdCredLockedByAdministrator,false
+user.pinCredentials.pinCredPolicyName,Default Credential Policy
+user.pinCredentials.pinCredUserCantChange,false
+user.pinCredentials.pinCredUserMustChange,true
+user.pinCredentials.pinCredDoesNotExpire,false
+user.pinCredentials.pinCredTimeChanged,"March 05, 2025 07:05:07 PST"
+user.pinCredentials.pinCredLockedByAdministrator,false
+user.status,1
+user.enableEmcc,false
+user.homeCluster,false
+user.imAndPresenceEnable,false
+user.directoryUri,Angela.Billet@amnhealthcare.com
+user.title,Project Manager
+user.calendarPresence,false
+user.ldapDirectoryName@uuid,{34609EFD-A1C9-6A12-56EA-42BC9336B800}
+user.ldapDirectoryName,LAB_LDAP_AMN
+user.userIdentity,Angela.Billet@amnhealthcare.com
+user.convertUserAccount@uuid,{34609EFD-A1C9-6A12-56EA-42BC9336B800}
+user.convertUserAccount,LAB_LDAP_AMN
+user.enableUserToHostConferenceNow,false

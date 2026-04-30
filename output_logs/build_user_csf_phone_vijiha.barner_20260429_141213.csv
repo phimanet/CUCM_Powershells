@@ -1,0 +1,8 @@
+Step,Status,Details
+Environment,Success,LAB (lascucmpl01.ahs.int)
+DN Type,Success,Strike (945)
+Lookup User,Success,Found user Vijiha.Barner (Vijiha Barner)
+Select DN,Success,Using available DN 9455551215
+Add Phone,Success,Created CSF9455551215 with DN 9455551215
+Update Line,Success,Updated alerting names on DN 9455551215
+Update User,Success,Updated Vijiha.Barner with phone CSF9455551215 and DN 9455551215

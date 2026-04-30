@@ -1,0 +1,4 @@
+Step,Status,Details
+Connect,Success,Unity server lascutypl01.ahs.int
+Lookup User,Not Found,User vijiha.barner not found in Unity
+Create User,Skipped,User chose not to create local Unity user

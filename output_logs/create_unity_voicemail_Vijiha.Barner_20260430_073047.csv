@@ -1,0 +1,5 @@
+Step,Status,Details
+Connect,Success,Unity server lascutypl01.ahs.int
+Create User,Fallback,LDAP import API unavailable; created local Unity user Vijiha.Barner and will require manual LDAP integration
+LDAP Integration,Success,Mailbox is integrated with LDAP directory
+Set PIN,Success,PIN updated and user must change at next login

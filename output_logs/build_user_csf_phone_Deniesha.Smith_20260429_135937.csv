@@ -1,0 +1,8 @@
+Step,Status,Details
+Environment,Success,LAB (lascucmpl01.ahs.int)
+DN Type,Success,Recruiter (469)
+Lookup User,Success,Found user Deniesha.Smith (Deniesha Smith)
+Select DN,Success,Using available DN 4695551213
+Add Phone,Success,Created CSF4695551213 with DN 4695551213
+Update Line,Success,Updated alerting names on DN 4695551213
+Update User,Success,Updated Deniesha.Smith with phone CSF4695551213 and DN 4695551213

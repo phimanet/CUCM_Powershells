@@ -1,0 +1,6 @@
+Step,Status,Details
+Lookup User,Success,Found user Kirby.Parker (Kirby Parker)
+Select DN,Success,Using available DN 2145551212
+Add Phone,Success,Created CSF2145551212 with DN 2145551212
+Update Line,Success,Updated alerting names on DN 2145551212
+Update User,Failed,"HTTP 500: <?xml version='1.0' encoding='UTF-8'?><soapenv:Envelope xmlns:soapenv=""http://schemas.xmlsoap.org/soap/envelope/""><soapenv:Body><soapenv:Fault><faultcode>soapenv:Client</faultcode><faultstring>Self-Service User ID entered for EndUser already exists.</faultstring><detail><axlError><axlcode>19193</axlcode><axlmessage>Self-Service User ID entered for EndUser already exists.</axlmessage><request>updateUser</request></axlError></detail></soapenv:Fault></soapenv:Body></soapenv:Envelope>"

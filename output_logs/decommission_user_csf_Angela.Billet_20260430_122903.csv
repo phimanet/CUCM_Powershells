@@ -1,0 +1,8 @@
+Step,Status,Details
+Lookup User,Success,Found Angela.Billet (Angela Billet)
+Update User,Success,"Rolled back End User entries for Angela.Billet: removed device CSF4695551212, removed CSF line presence mapping, cleared Primary Extension, UC Service Profile, and Roles"
+Verify End User Primary,Success,Primary extension now /
+Remove Phone,Success,Removed phone CSF4695551212
+Delete Unity Mailbox,Success,Deleted Unity mailbox alias Angela.Billet on LASCUTYPL01.ahs.int
+Update Line Inactive,Success,Marked 4695551212/ENT_DEVICE_PT inactive and reusable
+Verify Line,Success,active=false; associatedDevices=0; description=CNAM:AMNHealthcare 4695551212 Automation USE ONLY

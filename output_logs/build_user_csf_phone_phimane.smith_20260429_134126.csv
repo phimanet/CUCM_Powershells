@@ -1,0 +1,2 @@
+Step,Status,Details
+Script,Error,"getUser failed with HTTP 500: <?xml version='1.0' encoding='UTF-8'?><soapenv:Envelope xmlns:soapenv=""http://schemas.xmlsoap.org/soap/envelope/""><soapenv:Body><soapenv:Fault><faultcode>soapenv:Server</faultcode><faultstring>Item not valid: The specified User was not found</faultstring><detail><axlError><axlcode>5007</axlcode><axlmessage>Item not valid: The specified User was not found</axlmessage><request>getUser</request></axlError></detail></soapenv:Fault></soapenv:Body></soapenv:Envelope>"

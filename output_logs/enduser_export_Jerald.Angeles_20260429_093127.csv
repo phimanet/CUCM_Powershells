@@ -1,0 +1,78 @@
+Field,Value
+user@uuid,{20E414C3-4564-0DE1-6833-51065B021008}
+user.firstName,Jerald
+user.displayName,Jerald Angeles
+user.lastName,Angeles
+user.userid,Jerald.Angeles
+user.mailid,Jerald.Angeles@amnhealthcare.com
+user.department,Infrastructure - 9500
+user.manager,Todd.Stott
+user.associatedDevices.device,CSF8585236620
+user.primaryExtension.pattern,8585236620
+user.primaryExtension.routePartitionName,ENT_DEVICE_PT
+user.associatedGroups.userGroup.name,AMN User
+user.associatedGroups.userGroup.userRoles.userRole[1],Standard CCM End Users
+user.associatedGroups.userGroup.userRoles.userRole[2],Standard CCMUSER Administration
+user.associatedGroups.userGroup.userRoles.userRole[3],Standard CTI Allow Call Monitoring
+user.associatedGroups.userGroup.userRoles.userRole[4],Standard CTI Allow Call Park Monitoring
+user.associatedGroups.userGroup.userRoles.userRole[5],Standard CTI Allow Call Recording
+user.associatedGroups.userGroup.userRoles.userRole[6],Standard CTI Allow Control of All Devices
+user.associatedGroups.userGroup.userRoles.userRole[7],Standard CTI Allow Control of Phones supporting Connected Xfer and conf
+user.associatedGroups.userGroup.userRoles.userRole[8],Standard CTI Allow Control of Phones supporting Rollover Mode
+user.associatedGroups.userGroup.userRoles.userRole[9],Standard CTI Enabled
+user.enableCti,true
+user.presenceGroupName@uuid,{AD243D17-98B4-4118-8FEB-5FF2E1B781AC}
+user.presenceGroupName,Standard Presence group
+user.subscribeCallingSearchSpaceName@uuid,{A87C083B-260C-2D24-FE1D-8D23C6B66DB5}
+user.subscribeCallingSearchSpaceName,Route_Internal_CSS
+user.enableMobility,false
+user.enableMobileVoiceAccess,false
+user.maxDeskPickupWaitTime,10000
+user.remoteDestinationLimit,4
+user.passwordCredentials.pwdCredPolicyName,Default Credential Policy
+user.passwordCredentials.pwdCredUserCantChange,false
+user.passwordCredentials.pwdCredUserMustChange,true
+user.passwordCredentials.pwdCredDoesNotExpire,false
+user.passwordCredentials.pwdCredTimeChanged,"February 01, 2024 20:13:47 PST"
+user.passwordCredentials.pwdCredLockedByAdministrator,false
+user.pinCredentials.pinCredPolicyName,Default Credential Policy
+user.pinCredentials.pinCredUserCantChange,false
+user.pinCredentials.pinCredUserMustChange,true
+user.pinCredentials.pinCredDoesNotExpire,false
+user.pinCredentials.pinCredTimeChanged,"February 01, 2024 20:13:47 PST"
+user.pinCredentials.pinCredLockedByAdministrator,false
+user.status,1
+user.enableEmcc,false
+user.homeCluster,true
+user.imAndPresenceEnable,false
+user.serviceProfile@uuid,{0205686D-41AB-40CA-8ABB-72991DC38767}
+user.serviceProfile,LAB_Service_Profile_No_IM
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[1].laapAssociate,t
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[1].laapProductType,Cisco Unified Client Services Framework
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[1].laapDeviceName,CSF8585236620
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[1].laapDirectory,8585236620
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[1].laapPartition,ENT_DEVICE_PT
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[1].laapDescription,CSF Jerald Angeles
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[1]@uuid,{4776F7FB-79AE-1485-0614-97EF618788F5}
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[2].laapAssociate,t
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[2].laapProductType,Cisco Unified Client Services Framework
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[2].laapDeviceName,CSF8585236620
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[2].laapDirectory,8585236620
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[2].laapPartition,ENT_DEVICE_PT
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[2].laapDescription,CSF Jerald Angeles
+user.lineAppearanceAssociationForPresences.lineAppearanceAssociationForPresence[2]@uuid,{4776F7FB-79AE-1485-0614-97EF618788F5}
+user.directoryUri,Jerald.Angeles@amnhealthcare.com
+user.telephoneNumber,8585236620
+user.title,"Senior Manager, IT Infrastructure & Support"
+user.extensionsInfo.extension@uuid,{3F27A882-3676-43A4-B2FC-537A006DF9D8}
+user.extensionsInfo.extension.pattern@uuid,{97C4A1B0-B977-20B8-5979-D4B274CB2649}
+user.extensionsInfo.extension.pattern,8585236620
+user.extensionsInfo.extension.routePartition,ENT_DEVICE_PT
+user.selfService,8585236620
+user.calendarPresence,false
+user.ldapDirectoryName@uuid,{34609EFD-A1C9-6A12-56EA-42BC9336B800}
+user.ldapDirectoryName,LAB_LDAP_AMN
+user.userIdentity,Jerald.Angeles@amnhealthcare.com
+user.convertUserAccount@uuid,{34609EFD-A1C9-6A12-56EA-42BC9336B800}
+user.convertUserAccount,LAB_LDAP_AMN
+user.enableUserToHostConferenceNow,false

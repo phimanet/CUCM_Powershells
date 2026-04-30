@@ -1,0 +1,8 @@
+Step,Status,Details
+Connect,Success,Unity server lascutypl01.ahs.int
+Create User,Success,Imported LDAP Unity user vijiha.barner with extension 9455551215
+LDAP Snapshot,Success,Before-integration export saved to output_logs\unity_user_export_vijiha.barner_before_ldap_20260430_085310.json
+LDAP Integration,Success,Mailbox is integrated with LDAP directory
+LDAP Snapshot,Success,After-integration export saved to output_logs\unity_user_export_vijiha.barner_after_ldap_20260430_085310.json
+LDAP Diff,Success,Diff report saved to output_logs\unity_user_diff_vijiha.barner_20260430_085310.csv
+Set PIN,Success,PIN updated and user must change at next login
