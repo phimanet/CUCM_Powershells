@@ -53,6 +53,8 @@ def main():
         print("\n--- Phone Devices ---")
         print("  8. Extract ALL Phone Devices")
         print("  9. Build Cisco Jabber Laptop with Voicemail")
+        print(" 10. Build_user_CSF (New Flow)")
+        print(" 11. Offboard User (Remove CSF + Unity, Keep DN Inactive)")
         
         print("\n--- Server Tools ---")
         print("  7. Do LDAP User Sync")
@@ -61,7 +63,7 @@ def main():
         print("  0. Exit")
         print("==================================================")
         
-        choice = input("\nEnter your choice (0-9): ")
+        choice = input("\nEnter your choice (0-11): ")
         
         if choice == '1':
             run_script("Add_DirectoryNumber_v1.py")
@@ -81,12 +83,16 @@ def main():
             run_script("Extract_All_Phones_v1.py")
         elif choice == '9':
             run_script("Build_User_CSF_Phone_From_Template_v1.py")
+        elif choice == '10':
+            run_script("Build_User_CSF_Phone_From_Template_v1.py")
+        elif choice == '11':
+            run_script("Decommission_User_CSF_Voicemail_v1.py")
         elif choice == '0':
             clear_screen()
             print("Exiting Toolkit. Goodbye!")
             break
         else:
-            print("\nInvalid choice. Please enter a number between 0 and 9.")
+            print("\nInvalid choice. Please enter a number between 0 and 11.")
             input("Press Enter to try again...")
 
 if __name__ == "__main__":

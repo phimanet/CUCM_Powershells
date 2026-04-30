@@ -276,12 +276,13 @@ def main():
         return
 
     # -------------------------
-    # Step 5: Write to CSV (Field, Value)
+    # Step 5: Write to CSV (Field, Value) and raw XML
     # -------------------------
     current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = "output_logs"
     os.makedirs(output_dir, exist_ok=True)
     out_file = os.path.join(output_dir, f"enduser_export_{userid}_{current_time}.csv")
+    xml_file = os.path.join(output_dir, f"enduser_export_{userid}_{current_time}.xml")
 
     with open(out_file, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -289,10 +290,15 @@ def main():
         for field_name, field_value in flat_data:
             writer.writerow([field_name, field_value])
 
+    # Also write raw XML for inspection
+    with open(xml_file, "w", encoding="utf-8") as f:
+        f.write(resp2.text)
+
     # Print summary to console
     print(f"\n✓ Export complete!")
     print(f"  Total fields extracted : {len(flat_data)}")
-    print(f"  Output file            : {out_file}")
+    print(f"  Output CSV file        : {out_file}")
+    print(f"  Output XML file        : {xml_file}")
     print(f"\n  Preview (first 30 fields):")
     print("  --------------------------------------------------")
     for field_name, field_value in flat_data[:30]:
