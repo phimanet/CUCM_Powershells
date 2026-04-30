@@ -446,37 +446,7 @@ def choose_phone_to_remove(phone_list):
         print("Invalid choice. Try again.")
 
 
-def main():
-    print("============================================================")
-    print(" CUCM/Unity Offboarding - Remove CSF + Mailbox, Keep DN")
-    print("============================================================")
-
-    env = choose_environment()
-    if env is None:
-        return
-
-    if env["name"] == "PRODUCTION":
-        proceed_prod = confirm_yes_no(
-            "You selected PRODUCTION. Continue with live offboarding actions?",
-            default_no=True,
-        )
-        if not proceed_prod:
-            print("Cancelled.")
-            return
-
-    cucm_ip = env["cucm_ip"]
-    unity_server = env["unity_server"]
-    print(f"Using {env['name']} CUCM: {cucm_ip}")
-    print(f"Using {env['name']} Unity: {unity_server}")
-
-    cucm_user = input("Enter CUCM Username: ").strip()
-    cucm_pass = getpass.getpass("Enter CUCM Password: ")
-
-    target_user = input("Enter userid to offboard (e.g., first.last): ").strip()
-    if not target_user:
-        print("No userid entered. Exiting.")
-        return
-
+def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, target_user):
     current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     log_file = os.path.join(OUTPUT_DIR, f"decommission_user_csf_{target_user}_{current_time}.csv")
@@ -509,8 +479,7 @@ def main():
             if not csf_device_names:
                 log_writer.writerow(["Find CSF Device", "Failed", "No CSF devices associated to user"])
                 print("No CSF device found in associatedDevices for this user.")
-                print(f"Results logged to: {log_file}")
-                return
+                return log_file
 
             phone_candidates = []
             for device_name in csf_device_names:
@@ -535,8 +504,7 @@ def main():
             if not phone_candidates:
                 log_writer.writerow(["Get Phone", "Failed", "Could not fetch any CSF phone details"])
                 print("Could not fetch CSF phone details for this user.")
-                print(f"Results logged to: {log_file}")
-                return
+                return log_file
 
             selected_phone = choose_phone_to_remove(phone_candidates)
             dn_pattern = selected_phone["primary_line"].get("pattern", "").strip()
@@ -553,8 +521,7 @@ def main():
             if not proceed:
                 log_writer.writerow(["Confirmation", "Cancelled", "Operator cancelled before changes"])
                 print("Cancelled by operator.")
-                print(f"Results logged to: {log_file}")
-                return
+                return log_file
 
             updated_devices = [d for d in user_details.get("associatedDevices", []) if d != selected_phone["name"]]
 
@@ -715,7 +682,50 @@ def main():
             log_writer.writerow(["Script", "Error", str(e)])
             print(f"Script failed: {e}")
 
-    print(f"\nResults logged to: {log_file}")
+    return log_file
+
+
+def main():
+    print("============================================================")
+    print(" CUCM/Unity Offboarding - Remove CSF + Mailbox, Keep DN")
+    print("============================================================")
+
+    env = choose_environment()
+    if env is None:
+        return
+
+    if env["name"] == "PRODUCTION":
+        proceed_prod = confirm_yes_no(
+            "You selected PRODUCTION. Continue with live offboarding actions?",
+            default_no=True,
+        )
+        if not proceed_prod:
+            print("Cancelled.")
+            return
+
+    cucm_ip = env["cucm_ip"]
+    unity_server = env["unity_server"]
+    print(f"Using {env['name']} CUCM: {cucm_ip}")
+    print(f"Using {env['name']} Unity: {unity_server}")
+
+    cucm_user = input("Enter CUCM Username: ").strip()
+    cucm_pass = getpass.getpass("Enter CUCM Password: ")
+
+    while True:
+        target_user = input("Enter userid to offboard (e.g., first.last): ").strip()
+        if not target_user:
+            print("No userid entered. Exiting.")
+            return
+
+        log_file = run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, target_user)
+        print(f"\nResults logged to: {log_file}")
+
+        run_another = confirm_yes_no(
+            "Run another decommission using the same username/password?",
+            default_no=True,
+        )
+        if not run_another:
+            break
 
 
 if __name__ == "__main__":
