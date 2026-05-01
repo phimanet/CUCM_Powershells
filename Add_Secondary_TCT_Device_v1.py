@@ -188,6 +188,11 @@ def build_add_tct_phone_soap(user_details, new_phone_name, dn_pattern, dn_partit
                      <pattern>{escape(dn_pattern)}</pattern>
                      <routePartitionName>{escape(dn_partition)}</routePartitionName>
                   </dirn>
+                        <associatedEndusers>
+                            <enduser>
+                                <userId>{escape(user_details['userid'])}</userId>
+                            </enduser>
+                        </associatedEndusers>
                   <label>{escape(dn_pattern)}</label>
                   <display>{escape(display_name)}</display>
                   <displayAscii>{escape(display_name)}</displayAscii>

@@ -54,7 +54,7 @@ def main():
         print("  8. Extract ALL Phone Devices")
         print("  9. Build Cisco Jabber Laptop with Voicemail")
         print(" 10. Offboard User (Remove CSF + Unity, Keep DN Inactive)")
-        print(" 11. Add Secondary TCT Device (Shared Existing DN)")
+        print(" 11. Add Secondary Device - Jabber for iPhone")
         print(" 12. Export TCT Device All Properties")
         
         print("\n--- Server Tools ---")
