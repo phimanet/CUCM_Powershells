@@ -55,8 +55,9 @@ def main():
         print("  9. Build Cisco Jabber Laptop with Voicemail")
         print(" 10. Offboard User (Remove CSF + Unity, Keep DN Inactive)")
         print(" 11. Add Secondary Device - Jabber for iPhone")
-        print(" 12. Extract Device either CSF, TCT, or BOT")
-        print(" 13. Add Secondary Device - Jabber for Android")
+        print(" 12. Add Secondary Device - Jabber for Android")
+        print(" 13. Extract Device either CSF, TCT, or BOT")
+        print(" 14. STRIKE MODE - Add Secondary Device Jabber TCT and BOT")
         
         print("\n--- Server Tools ---")
         print("  7. Do LDAP User Sync")
@@ -65,7 +66,7 @@ def main():
         print("  0. Exit")
         print("==================================================")
         
-        choice = input("\nEnter your choice (0-13): ")
+        choice = input("\nEnter your choice (0-14): ")
         
         if choice == '1':
             run_script("Add_DirectoryNumber_v1.py")
@@ -90,15 +91,17 @@ def main():
         elif choice == '11':
             run_script("Add_Secondary_TCT_Device_v1.py")
         elif choice == '12':
-            run_script("Extract_TCT_Phone_Properties_v1.py")
-        elif choice == '13':
             run_script("Add_Secondary_BOT_Device_v1.py")
+        elif choice == '13':
+            run_script("Extract_TCT_Phone_Properties_v1.py")
+        elif choice == '14':
+            run_script("Add_Secondary_STRIKE_Devices_v1.py")
         elif choice == '0':
             clear_screen()
             print("Exiting Toolkit. Goodbye!")
             break
         else:
-            print("\nInvalid choice. Please enter a number between 0 and 13.")
+            print("\nInvalid choice. Please enter a number between 0 and 14.")
             input("Press Enter to try again...")
 
 if __name__ == "__main__":

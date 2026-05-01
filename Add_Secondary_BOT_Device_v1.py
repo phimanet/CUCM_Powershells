@@ -231,6 +231,14 @@ def build_update_user_devices_soap(userid, associated_devices):
 </soapenv:Envelope>"""
 
 
+def confirm_yes_no(prompt, default_no=True):
+    suffix = " [y/N]: " if default_no else " [Y/n]: "
+    value = input(prompt + suffix).strip().lower()
+    if not value:
+        return not default_no
+    return value in {"y", "yes"}
+
+
 def main():
     print("============================================================")
     print(" CUCM AXL - Add Secondary BOT Device (Shared Existing DN)")
@@ -257,88 +265,95 @@ def main():
 
     template = load_template(template_path)
 
-    target_user = input("Enter userid to add secondary BOT for (e.g., Sarah.Paris): ").strip()
-    if not target_user:
-        print("No userid entered. Exiting.")
-        return
+    while True:
+        target_user = input("Enter userid to add secondary BOT for (e.g., Sarah.Paris): ").strip()
+        if not target_user:
+            print("No userid entered. Exiting.")
+            return
 
-    current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    log_file = os.path.join(OUTPUT_DIR, f"add_secondary_bot_{target_user}_{current_time}.csv")
+        current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        log_file = os.path.join(OUTPUT_DIR, f"add_secondary_bot_{target_user}_{current_time}.csv")
+        run_success = False
 
-    with open(log_file, "w", newline="", encoding="utf-8") as log_handle:
-        writer = csv.writer(log_handle)
-        writer.writerow(["Step", "Status", "Details"])
+        with open(log_file, "w", newline="", encoding="utf-8") as log_handle:
+            writer = csv.writer(log_handle)
+            writer.writerow(["Step", "Status", "Details"])
 
-        try:
-            user_details = get_user_details(session, cucm_ip, target_user)
-            writer.writerow(["Lookup User", "Success", f"Found {user_details['userid']}"])
-            print(f"Found user: {user_details['userid']}")
+            try:
+                user_details = get_user_details(session, cucm_ip, target_user)
+                writer.writerow(["Lookup User", "Success", f"Found {user_details['userid']}"])
+                print(f"Found user: {user_details['userid']}")
 
-            dn_pattern = (user_details.get("primaryExtension", {}).get("pattern") or "").strip()
-            dn_partition = (user_details.get("primaryExtension", {}).get("routePartitionName") or "").strip() or DEFAULT_ROUTE_PARTITION
+                dn_pattern = (user_details.get("primaryExtension", {}).get("pattern") or "").strip()
+                dn_partition = (user_details.get("primaryExtension", {}).get("routePartitionName") or "").strip() or DEFAULT_ROUTE_PARTITION
 
-            if not dn_pattern:
-                raise RuntimeError("End User does not have a primary extension. Set primary extension first, then rerun.")
+                if not dn_pattern:
+                    raise RuntimeError("End User does not have a primary extension. Set primary extension first, then rerun.")
 
-            new_device = f"BOT{dn_pattern}"
+                new_device = f"BOT{dn_pattern}"
 
-            writer.writerow(["Resolve DN", "Success", f"Using End User primary extension {dn_pattern}/{dn_partition}"])
-            writer.writerow(["Resolve Device Name", "Success", f"Target device name {new_device}"])
-            print(f"Using End User primary extension: {dn_pattern}/{dn_partition}")
-            print(f"New device name: {new_device}")
+                writer.writerow(["Resolve DN", "Success", f"Using End User primary extension {dn_pattern}/{dn_partition}"])
+                writer.writerow(["Resolve Device Name", "Success", f"Target device name {new_device}"])
+                print(f"Using End User primary extension: {dn_pattern}/{dn_partition}")
+                print(f"New device name: {new_device}")
 
-            if new_device in user_details.get("associatedDevices", []):
-                writer.writerow(["Check Target Device", "Skipped", f"{new_device} already associated to user"])
-                print(f"{new_device} is already associated to this user. No change needed.")
+                if new_device in user_details.get("associatedDevices", []):
+                    writer.writerow(["Check Target Device", "Skipped", f"{new_device} already associated to user"])
+                    print(f"{new_device} is already associated to this user. No change needed.")
+                    print(f"Results logged to: {log_file}")
+                elif phone_exists(session, cucm_ip, new_device):
+                    raise RuntimeError(f"Target device {new_device} already exists in CUCM. Choose a different name.")
+                else:
+                    writer.writerow([
+                        "Template",
+                        "Success",
+                        (
+                            f"product={template['product']}; class={template['class']}; protocol={template['protocol']}; "
+                            f"securityProfile={template['securityProfileName']}; phoneTemplate={template['phoneTemplateName']}"
+                        ),
+                    ])
+
+                    add_phone_soap = build_add_bot_phone_soap(
+                        user_details,
+                        new_device,
+                        dn_pattern,
+                        dn_partition,
+                        template,
+                    )
+                    add_phone_resp = axl_post(session, cucm_ip, add_phone_soap)
+                    if add_phone_resp.status_code != 200:
+                        raise RuntimeError(f"Add BOT phone failed HTTP {add_phone_resp.status_code}: {add_phone_resp.text[:1200]}")
+
+                    writer.writerow(["Add BOT Device", "Success", f"Created {new_device} with shared DN {dn_pattern}"])
+                    print(f"Added device: {new_device}")
+
+                    updated_devices = list(user_details.get("associatedDevices", []))
+                    if new_device not in updated_devices:
+                        updated_devices.append(new_device)
+
+                    update_user_soap = build_update_user_devices_soap(user_details["userid"], updated_devices)
+                    update_user_resp = axl_post(session, cucm_ip, update_user_soap)
+                    if update_user_resp.status_code != 200:
+                        raise RuntimeError(f"Update user association failed HTTP {update_user_resp.status_code}: {update_user_resp.text[:1200]}")
+
+                    writer.writerow(["Update End User", "Success", f"Associated {new_device} to user {user_details['userid']}"])
+                    print(f"Updated user association for {user_details['userid']}")
+
+                    print("\nSecondary BOT build complete. No voicemail actions were performed.")
+                    print(f"Results logged to: {log_file}")
+                    run_success = True
+
+            except Exception as exc:
+                writer.writerow(["Script", "Error", str(exc)])
+                print(f"\nScript failed: {exc}")
                 print(f"Results logged to: {log_file}")
-                return
 
-            if phone_exists(session, cucm_ip, new_device):
-                raise RuntimeError(f"Target device {new_device} already exists in CUCM. Choose a different name.")
-
-            writer.writerow([
-                "Template",
-                "Success",
-                (
-                    f"product={template['product']}; class={template['class']}; protocol={template['protocol']}; "
-                    f"securityProfile={template['securityProfileName']}; phoneTemplate={template['phoneTemplateName']}"
-                ),
-            ])
-
-            add_phone_soap = build_add_bot_phone_soap(
-                user_details,
-                new_device,
-                dn_pattern,
-                dn_partition,
-                template,
-            )
-            add_phone_resp = axl_post(session, cucm_ip, add_phone_soap)
-            if add_phone_resp.status_code != 200:
-                raise RuntimeError(f"Add BOT phone failed HTTP {add_phone_resp.status_code}: {add_phone_resp.text[:1200]}")
-
-            writer.writerow(["Add BOT Device", "Success", f"Created {new_device} with shared DN {dn_pattern}"])
-            print(f"Added device: {new_device}")
-
-            updated_devices = list(user_details.get("associatedDevices", []))
-            if new_device not in updated_devices:
-                updated_devices.append(new_device)
-
-            update_user_soap = build_update_user_devices_soap(user_details["userid"], updated_devices)
-            update_user_resp = axl_post(session, cucm_ip, update_user_soap)
-            if update_user_resp.status_code != 200:
-                raise RuntimeError(f"Update user association failed HTTP {update_user_resp.status_code}: {update_user_resp.text[:1200]}")
-
-            writer.writerow(["Update End User", "Success", f"Associated {new_device} to user {user_details['userid']}"])
-            print(f"Updated user association for {user_details['userid']}")
-
-            print("\nSecondary BOT build complete. No voicemail actions were performed.")
-            print(f"Results logged to: {log_file}")
-
-        except Exception as exc:
-            writer.writerow(["Script", "Error", str(exc)])
-            print(f"\nScript failed: {exc}")
-            print(f"Results logged to: {log_file}")
+        prompt_text = "Add another secondary BOT using the same username/password?"
+        if not run_success:
+            prompt_text = "Try another secondary BOT using the same username/password?"
+        if not confirm_yes_no(prompt_text, default_no=True):
+            return
 
 
 if __name__ == "__main__":
