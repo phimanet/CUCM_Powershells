@@ -1,0 +1,22 @@
+{
+  "templateName": "BOT Jabber Android Standard Template",
+  "deviceNamePrefix": "BOT",
+  "product": "Cisco Dual Mode for Android",
+  "class": "Phone",
+  "protocol": "SIP",
+  "protocolSide": "User",
+  "callingSearchSpaceName": "Route_LAS_CSS",
+  "devicePoolName": "T3_PAC_DP",
+  "commonPhoneConfigName": "Standard Common Phone Profile",
+  "locationName": "T3CTZ_LOC",
+  "mediaResourceListName": "MRGL-LAS",
+  "securityProfileName": "Cisco Dual Mode for Android - Standard SIP Non-Secure Profile",
+  "sipProfileName": "Standard SIP Profile",
+  "phoneTemplateName": "Standard Dual Mode for Android",
+  "softkeyTemplateName": "Standard User",
+  "presenceGroupName": "Standard Presence group",
+  "subscribeCallingSearchSpaceName": "Route_Internal_CSS",
+  "rerouteCallingSearchSpaceName": "Route_Internal_CSS",
+  "lineMaxNumCalls": "2",
+  "lineBusyTrigger": "2"
+}

@@ -87,7 +87,7 @@ def choose_environment():
 
 def main():
     print("============================================================")
-    print(" CUCM AXL - Export TCT Phone All Properties")
+    print(" CUCM AXL - Export Device All Properties")
     print("============================================================")
 
     env = choose_environment()
@@ -104,27 +104,24 @@ def main():
     session.verify = False
     session.auth = HTTPBasicAuth(cucm_user, cucm_pass)
 
-    tct_name = input("Enter TCT device name (e.g., TCT8584652166): ").strip().upper()
-    if not tct_name:
-        print("No TCT device name entered. Exiting.")
+    device_name = input("Enter device name (e.g., CSF8584652166, TCT8584652166, BOT8584652166): ").strip().upper()
+    if not device_name:
+        print("No device name entered. Exiting.")
         return
-
-    if not tct_name.startswith("TCT"):
-        print("Warning: device name does not start with TCT. Continuing anyway.")
 
     soap = f"""<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:axl=\"http://www.cisco.com/AXL/API/15.0\">
    <soapenv:Body>
       <axl:getPhone>
-         <name>{escape(tct_name)}</name>
+            <name>{escape(device_name)}</name>
       </axl:getPhone>
    </soapenv:Body>
 </soapenv:Envelope>"""
 
     current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    csv_file = os.path.join(OUTPUT_DIR, f"tct_phone_export_{tct_name}_{current_time}.csv")
-    xml_file = os.path.join(OUTPUT_DIR, f"tct_phone_export_{tct_name}_{current_time}.xml")
+    csv_file = os.path.join(OUTPUT_DIR, f"device_export_{device_name}_{current_time}.csv")
+    xml_file = os.path.join(OUTPUT_DIR, f"device_export_{device_name}_{current_time}.xml")
 
     try:
         response = axl_post(session, cucm_ip, soap)
@@ -133,7 +130,7 @@ def main():
         return
 
     if response.status_code != 200:
-        print(f"getPhone failed for {tct_name} with HTTP {response.status_code}")
+        print(f"getPhone failed for {device_name} with HTTP {response.status_code}")
         print(response.text[:2000])
         return
 
@@ -166,7 +163,7 @@ def main():
         for field_name, field_value in flat_data:
             writer.writerow([field_name, field_value])
 
-    print(f"\nExport complete for {tct_name}.")
+    print(f"\nExport complete for {device_name}.")
     print(f"Fields exported: {len(flat_data)}")
     print(f"CSV file: {csv_file}")
     print(f"XML file: {xml_file}")
