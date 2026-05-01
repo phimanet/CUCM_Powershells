@@ -11,6 +11,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 OUTPUT_DIR = "output_logs"
 UNITY_LAB_SERVER = "lascutypl01.ahs.int"
+UNITY_PROD_SERVER = "SANCUTYP01.ahs.int"
 
 
 def make_unity_url(server, path):
@@ -103,18 +104,33 @@ def confirm_yes_no(prompt, default_no=True):
     return value in {"y", "yes"}
 
 
+def choose_unity_environment():
+    print("\nSelect Voicemail Environment:")
+    print(f"  1 - PRODUCTION ({UNITY_PROD_SERVER})")
+    print(f"  2 - LAB        ({UNITY_LAB_SERVER})")
+    print("  0 - Return")
+
+    while True:
+        choice = input("Enter choice (0, 1, 2, PROD, or LAB): ").strip().upper()
+        if choice in {"0", "R", "RETURN"}:
+            return None
+        if choice in {"1", "PROD", "PRODUCTION"}:
+            return {"name": "PRODUCTION", "server": UNITY_PROD_SERVER}
+        if choice in {"2", "LAB"}:
+            return {"name": "LAB", "server": UNITY_LAB_SERVER}
+        print("Invalid choice. Enter 0, 1, 2, PROD, or LAB.")
+
+
 def main():
     print("==================================================")
     print(" Cisco Unity Connection - Reset Voicemail PIN")
     print("==================================================\n")
 
-    unity_server = input(
-        f"Enter Cisco Unity Connection server (or press Enter for LAB: {UNITY_LAB_SERVER}), or 0 to return: "
-    ).strip()
-    if unity_server == "0":
+    env = choose_unity_environment()
+    if env is None:
         return
-    if not unity_server:
-        unity_server = UNITY_LAB_SERVER
+    unity_server = env["server"]
+    print(f"Using {env['name']} Voicemail Server: {unity_server}")
 
     admin_user = input("Enter Unity admin username: ").strip()
     if not admin_user:
