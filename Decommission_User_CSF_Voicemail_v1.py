@@ -16,6 +16,7 @@ UNITY_LAB_SERVER = "LASCUTYPL01.ahs.int"
 UNITY_PROD_SERVER = "SANCUTYP01.ahs.int"
 OUTPUT_DIR = "output_logs"
 DEFAULT_ROUTE_PARTITION = "ENT_DEVICE_PT"
+TARGET_DEVICE_PREFIXES = ("CSF", "BOT", "TCT")
 
 
 def axl_post(session, cucm_ip, soap_xml):
@@ -424,28 +425,6 @@ def confirm_yes_no(prompt, default_no=True):
     return value in {"y", "yes"}
 
 
-def choose_phone_to_remove(phone_list):
-    if not phone_list:
-        return None
-    if len(phone_list) == 1:
-        return phone_list[0]
-
-    print("\nMultiple CSF phones found for this user:")
-    for idx, phone in enumerate(phone_list, start=1):
-        primary_line = phone.get("primary_line", {})
-        dn_text = primary_line.get("pattern", "")
-        part_text = primary_line.get("partition", "")
-        print(f"  {idx} - {phone['name']} | DN: {dn_text} | PT: {part_text}")
-
-    while True:
-        choice = input(f"Choose phone to remove (1-{len(phone_list)}): ").strip()
-        if choice.isdigit():
-            index = int(choice)
-            if 1 <= index <= len(phone_list):
-                return phone_list[index - 1]
-        print("Invalid choice. Try again.")
-
-
 def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, target_user):
     current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -472,17 +451,23 @@ def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, targe
             log_writer.writerow(["Lookup User", "Success", f"Found {target_user} ({display_name})"])
             print(f"\nFound user: {target_user} ({display_name})")
 
-            csf_device_names = [
-                d for d in user_details.get("associatedDevices", []) if d.upper().startswith("CSF")
+            target_device_names = [
+                d
+                for d in user_details.get("associatedDevices", [])
+                if d and d.upper().startswith(TARGET_DEVICE_PREFIXES)
             ]
 
-            if not csf_device_names:
-                log_writer.writerow(["Find CSF Device", "Failed", "No CSF devices associated to user"])
-                print("No CSF device found in associatedDevices for this user.")
+            if not target_device_names:
+                log_writer.writerow([
+                    "Find Devices",
+                    "Skipped",
+                    "No CSF/BOT/TCT devices associated to user",
+                ])
+                print("No CSF/BOT/TCT devices found in associatedDevices for this user.")
                 return log_file
 
             phone_candidates = []
-            for device_name in csf_device_names:
+            for device_name in target_device_names:
                 try:
                     details = get_phone_details(session, cucm_ip, device_name)
                 except Exception as phone_err:
@@ -502,20 +487,40 @@ def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, targe
                 )
 
             if not phone_candidates:
-                log_writer.writerow(["Get Phone", "Failed", "Could not fetch any CSF phone details"])
-                print("Could not fetch CSF phone details for this user.")
+                log_writer.writerow(["Get Phone", "Failed", "Could not fetch any CSF/BOT/TCT phone details"])
+                print("Could not fetch CSF/BOT/TCT phone details for this user.")
                 return log_file
 
-            selected_phone = choose_phone_to_remove(phone_candidates)
-            dn_pattern = selected_phone["primary_line"].get("pattern", "").strip()
-            dn_partition = selected_phone["primary_line"].get("partition", "").strip() or DEFAULT_ROUTE_PARTITION
+            print("\nTarget devices for removal:")
+            for phone in phone_candidates:
+                primary_line = phone.get("primary_line", {})
+                dn_pattern = (primary_line.get("pattern") or "").strip()
+                dn_partition = (primary_line.get("partition") or "").strip() or DEFAULT_ROUTE_PARTITION
+                print(f"  - {phone['name']} | DN: {dn_pattern or '<not found>'} | PT: {dn_partition}")
 
-            print(f"\nSelected phone: {selected_phone['name']}")
-            print(f"Primary DN      : {dn_pattern or '<not found>'}")
-            print(f"Route Partition : {dn_partition}")
+            dn_targets = []
+            seen_dn_keys = set()
+            for phone in phone_candidates:
+                for line in phone.get("all_lines", []):
+                    dn_pattern = (line.get("pattern") or "").strip()
+                    dn_partition = (line.get("partition") or "").strip() or DEFAULT_ROUTE_PARTITION
+                    if not dn_pattern:
+                        continue
+                    dn_key = (dn_pattern, dn_partition)
+                    if dn_key in seen_dn_keys:
+                        continue
+                    seen_dn_keys.add(dn_key)
+                    dn_targets.append({"pattern": dn_pattern, "partition": dn_partition})
+
+            if dn_targets:
+                print("DN(s) to mark inactive:")
+                for dn_item in dn_targets:
+                    print(f"  - {dn_item['pattern']} / {dn_item['partition']}")
+            else:
+                print("No line DN found on matched devices.")
 
             proceed = confirm_yes_no(
-                "Proceed to UNDO build (End User rollback, remove CSF, remove Unity mailbox, mark DN inactive)?",
+                "Proceed to UNDO build (End User rollback, remove CSF/BOT/TCT, remove Unity mailbox, mark DN inactive)?",
                 default_no=True,
             )
             if not proceed:
@@ -523,16 +528,32 @@ def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, targe
                 print("Cancelled by operator.")
                 return log_file
 
-            updated_devices = [d for d in user_details.get("associatedDevices", []) if d != selected_phone["name"]]
+            removed_phone_names = [phone["name"] for phone in phone_candidates]
+            updated_devices = [d for d in user_details.get("associatedDevices", []) if d not in removed_phone_names]
 
-            removed_line_description = selected_phone.get("description", "").strip() or f"CSF {display_name}"
+            first_csf_phone = next(
+                (phone for phone in phone_candidates if phone.get("name", "").upper().startswith("CSF")),
+                None,
+            )
+            removed_phone_for_presence = first_csf_phone["name"] if first_csf_phone else ""
+            removed_line_description = (
+                (first_csf_phone.get("description", "").strip() if first_csf_phone else "")
+                or f"CSF {display_name}"
+            )
+            removed_dn_for_presence = ""
+            removed_partition_for_presence = ""
+            if first_csf_phone:
+                removed_dn_for_presence = (first_csf_phone["primary_line"].get("pattern") or "").strip()
+                removed_partition_for_presence = (
+                    (first_csf_phone["primary_line"].get("partition") or "").strip() or DEFAULT_ROUTE_PARTITION
+                )
 
             update_user_soap = build_update_user_devices_soap(
                 user_details["userid"],
                 updated_devices,
-                selected_phone["name"],
-                dn_pattern,
-                dn_partition,
+                removed_phone_for_presence,
+                removed_dn_for_presence,
+                removed_partition_for_presence,
                 removed_line_description,
             )
             user_update_resp = axl_post(session, cucm_ip, update_user_soap)
@@ -540,9 +561,9 @@ def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, targe
                 retry_user_soap = build_update_user_devices_soap(
                     user_details["userid"],
                     updated_devices,
-                    selected_phone["name"],
-                    dn_pattern,
-                    dn_partition,
+                    removed_phone_for_presence,
+                    removed_dn_for_presence,
+                    removed_partition_for_presence,
                     removed_line_description,
                     clear_self_service=True,
                     clear_service_profile=False,
@@ -562,7 +583,7 @@ def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, targe
                     "Success",
                     (
                         f"Rolled back End User entries for {user_details['userid']}: "
-                        f"removed device {selected_phone['name']}, removed CSF line presence mapping, "
+                        f"removed devices {', '.join(removed_phone_names)}, removed CSF line presence mapping when available, "
                         f"cleared Primary Extension, UC Service Profile, and Roles"
                     ),
                 ])
@@ -572,16 +593,17 @@ def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, targe
                 refreshed_primary = refreshed_user.get("primaryExtension", {})
                 refreshed_primary_pattern = (refreshed_primary.get("pattern") or "").strip()
                 refreshed_primary_partition = (refreshed_primary.get("routePartitionName") or "").strip()
-                if refreshed_primary_pattern == dn_pattern and refreshed_primary_partition == dn_partition:
+                removed_dn_keys = {(item["pattern"], item["partition"]) for item in dn_targets}
+                if (refreshed_primary_pattern, refreshed_primary_partition) in removed_dn_keys:
                     log_writer.writerow([
                         "Verify End User Primary",
                         "Warning",
                         (
-                            f"Primary extension still points to removed DN {dn_pattern}/{dn_partition}. "
+                            "Primary extension still points to one of the removed DNs. "
                             "If this is the user's only line, clear/adjust primary extension manually in CUCM End User."
                         ),
                     ])
-                    print("Warning: primary extension still points to removed DN; review End User primary extension.")
+                    print("Warning: primary extension still points to a removed DN; review End User primary extension.")
                 else:
                     log_writer.writerow([
                         "Verify End User Primary",
@@ -596,18 +618,27 @@ def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, targe
                 ])
                 print(f"Update User failed with HTTP {user_update_resp.status_code}.")
 
-            delete_phone_soap = build_delete_phone_soap(selected_phone["name"])
-            delete_phone_resp = axl_post(session, cucm_ip, delete_phone_soap)
-            if delete_phone_resp.status_code == 200:
-                log_writer.writerow(["Remove Phone", "Success", f"Removed phone {selected_phone['name']}"])
-                print(f"Removed phone {selected_phone['name']}.")
-            else:
-                log_writer.writerow([
-                    "Remove Phone",
-                    "Failed",
-                    f"HTTP {delete_phone_resp.status_code}: {delete_phone_resp.text[:1000]}",
-                ])
-                print(f"Remove Phone failed with HTTP {delete_phone_resp.status_code}.")
+            removed_count = 0
+            for phone in phone_candidates:
+                delete_phone_soap = build_delete_phone_soap(phone["name"])
+                delete_phone_resp = axl_post(session, cucm_ip, delete_phone_soap)
+                if delete_phone_resp.status_code == 200:
+                    removed_count += 1
+                    log_writer.writerow(["Remove Phone", "Success", f"Removed phone {phone['name']}"])
+                    print(f"Removed phone {phone['name']}.")
+                else:
+                    log_writer.writerow([
+                        "Remove Phone",
+                        "Failed",
+                        f"{phone['name']} -> HTTP {delete_phone_resp.status_code}: {delete_phone_resp.text[:1000]}",
+                    ])
+                    print(f"Remove Phone failed for {phone['name']} with HTTP {delete_phone_resp.status_code}.")
+
+            log_writer.writerow([
+                "Device Summary",
+                "Info",
+                f"Found {len(phone_candidates)} target device(s); removed {removed_count}",
+            ])
 
             unity_deleted = False
             try:
@@ -632,49 +663,53 @@ def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, targe
                 log_writer.writerow(["Delete Unity Mailbox", "Failed", str(unity_err)])
                 print(f"Unity mailbox delete failed: {unity_err}")
 
-            if dn_pattern:
-                update_line_soap = build_update_line_inactive_soap(dn_pattern, dn_partition)
-                line_resp = axl_post(session, cucm_ip, update_line_soap)
+            if dn_targets:
+                for dn_item in dn_targets:
+                    pattern = dn_item["pattern"]
+                    partition = dn_item["partition"]
+                    update_line_soap = build_update_line_inactive_soap(pattern, partition)
+                    line_resp = axl_post(session, cucm_ip, update_line_soap)
 
-                if line_resp.status_code == 200:
-                    log_writer.writerow([
-                        "Update Line Inactive",
-                        "Success",
-                        f"Marked {dn_pattern}/{dn_partition} inactive and reusable",
-                    ])
-                    print(f"Marked DN {dn_pattern} inactive for reuse.")
-                else:
-                    log_writer.writerow([
-                        "Update Line Inactive",
-                        "Failed",
-                        f"HTTP {line_resp.status_code}: {line_resp.text[:1000]}",
-                    ])
-                    print(f"Update Line failed with HTTP {line_resp.status_code}.")
+                    if line_resp.status_code == 200:
+                        log_writer.writerow([
+                            "Update Line Inactive",
+                            "Success",
+                            f"Marked {pattern}/{partition} inactive and reusable",
+                        ])
+                        print(f"Marked DN {pattern} inactive for reuse.")
+                    else:
+                        log_writer.writerow([
+                            "Update Line Inactive",
+                            "Failed",
+                            f"{pattern}/{partition} -> HTTP {line_resp.status_code}: {line_resp.text[:1000]}",
+                        ])
+                        print(f"Update Line failed for {pattern}/{partition} with HTTP {line_resp.status_code}.")
 
-                line_state = get_line_state(session, cucm_ip, dn_pattern, dn_partition)
-                if line_state["found"]:
-                    summary = (
-                        f"active={line_state['active']}; associatedDevices={len(line_state['associatedDevices'])}; "
-                        f"description={line_state['description']}"
-                    )
-                    log_writer.writerow(["Verify Line", "Success", summary])
-                    print(f"Line verification: {summary}")
-                else:
-                    log_writer.writerow([
-                        "Verify Line",
-                        "Failed",
-                        "Could not read line state after update",
-                    ])
+                    line_state = get_line_state(session, cucm_ip, pattern, partition)
+                    if line_state["found"]:
+                        summary = (
+                            f"{pattern}/{partition}: active={line_state['active']}; "
+                            f"associatedDevices={len(line_state['associatedDevices'])}; "
+                            f"description={line_state['description']}"
+                        )
+                        log_writer.writerow(["Verify Line", "Success", summary])
+                        print(f"Line verification: {summary}")
+                    else:
+                        log_writer.writerow([
+                            "Verify Line",
+                            "Failed",
+                            f"Could not read line state after update for {pattern}/{partition}",
+                        ])
             else:
                 log_writer.writerow([
                     "Update Line Inactive",
                     "Skipped",
-                    "No DN found on selected phone",
+                    "No DN found on matched devices",
                 ])
-                print("No DN found on selected phone; line update skipped.")
+                print("No DN found on matched devices; line update skipped.")
 
             if unity_deleted:
-                print("\nOffboarding complete: CSF removed, Unity mailbox removed, DN retained as inactive.")
+                print("\nOffboarding complete: CSF/BOT/TCT removed, Unity mailbox removed, DN retained as inactive.")
             else:
                 print("\nOffboarding complete with Unity mailbox skipped/failed. Review log for details.")
 
@@ -687,7 +722,7 @@ def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, targe
 
 def main():
     print("============================================================")
-    print(" CUCM/Unity Offboarding - Remove CSF + Mailbox, Keep DN")
+    print(" CUCM/Unity Offboarding - Remove CSF/BOT/TCT + Mailbox, Keep DN")
     print("============================================================")
 
     env = choose_environment()
