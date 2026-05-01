@@ -62,11 +62,14 @@ def main():
         print("\n--- Server Tools ---")
         print("  7. Do LDAP User Sync")
 
+        print("\n--- Unity Tools ---")
+        print(" 15. Reset Voicemail PIN")
+
         print("\n--------------------------------------------------")
         print("  0. Exit")
         print("==================================================")
         
-        choice = input("\nEnter your choice (0-14): ")
+        choice = input("\nEnter your choice (0-15): ")
         
         if choice == '1':
             run_script("Add_DirectoryNumber_v1.py")
@@ -96,12 +99,14 @@ def main():
             run_script("Extract_TCT_Phone_Properties_v1.py")
         elif choice == '14':
             run_script("Add_Secondary_STRIKE_Devices_v1.py")
+        elif choice == '15':
+            run_script("Reset_Unity_Voicemail_Pin_v1.py")
         elif choice == '0':
             clear_screen()
             print("Exiting Toolkit. Goodbye!")
             break
         else:
-            print("\nInvalid choice. Please enter a number between 0 and 14.")
+            print("\nInvalid choice. Please enter a number between 0 and 15.")
             input("Press Enter to try again...")
 
 if __name__ == "__main__":
