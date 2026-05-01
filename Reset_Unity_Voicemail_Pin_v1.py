@@ -192,9 +192,13 @@ def main():
                     writer.writerow(["Confirmation", "Cancelled", "Operator cancelled after mailbox validation"])
                     print(f"Cancelled. Results logged to: {log_file}")
                 else:
-                    new_pin = getpass.getpass("Enter new voicemail PIN: ").strip()
+                    new_pin = input("Enter new voicemail PIN (visible): ").strip()
                     if not new_pin:
                         raise RuntimeError("No PIN entered.")
+
+                    confirm_pin = input("Re-enter new voicemail PIN (visible): ").strip()
+                    if new_pin != confirm_pin:
+                        raise RuntimeError("PIN entries did not match.")
 
                     set_user_pin(session, unity_server, object_id, new_pin, must_change=True)
                     writer.writerow([
