@@ -58,6 +58,8 @@ def main():
         print(" 12. Add Secondary Device - Jabber for Android")
         print(" 13. Extract Device either CSF, TCT, or BOT")
         print(" 14. STRIKE MODE - Add Secondary Device Jabber TCT and BOT")
+        print(" 16. Extract ALL Line Groups (Name + Extensions)")
+        print(" 17. Edit Line Group Members (Add/Remove DN)")
         
         print("\n--- Server Tools ---")
         print("  7. Do LDAP User Sync")
@@ -69,7 +71,7 @@ def main():
         print("  0. Exit")
         print("==================================================")
         
-        choice = input("\nEnter your choice (0-15): ")
+        choice = input("\nEnter your choice (0-17): ")
         
         if choice == '1':
             run_script("Add_DirectoryNumber_v1.py")
@@ -101,12 +103,16 @@ def main():
             run_script("Add_Secondary_STRIKE_Devices_v1.py")
         elif choice == '15':
             run_script("Reset_Unity_Voicemail_Pin_v1.py")
+        elif choice == '16':
+            run_script("Extract_All_LineGroups_v1.py")
+        elif choice == '17':
+            run_script("Edit_LineGroup_Members_v1.py")
         elif choice == '0':
             clear_screen()
             print("Exiting Toolkit. Goodbye!")
             break
         else:
-            print("\nInvalid choice. Please enter a number between 0 and 15.")
+            print("\nInvalid choice. Please enter a number between 0 and 17.")
             input("Press Enter to try again...")
 
 if __name__ == "__main__":
