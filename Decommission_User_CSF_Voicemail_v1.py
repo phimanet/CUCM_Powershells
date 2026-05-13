@@ -2,13 +2,72 @@ import csv
 import datetime
 import getpass
 import os
+import re
 import urllib3
 import requests
 import xml.etree.ElementTree as ET
 from requests.auth import HTTPBasicAuth
 from xml.sax.saxutils import escape
 
+try:
+    from pyad import aduser, adquery
+    PYAD_AVAILABLE = True
+except ImportError:
+    PYAD_AVAILABLE = False
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# ─────────────────────────────────────────
+# AD PHONE FIELD HELPERS
+# ─────────────────────────────────────────
+
+def _escape_ldap_filter(value):
+    """Escape LDAP filter metacharacters per RFC 4515 (backslash must be first)."""
+    for char, escaped in [
+        ("\\", "\\5c"),
+        ("*",  "\\2a"),
+        ("(",  "\\28"),
+        (")",  "\\29"),
+        ("\x00", "\\00"),
+    ]:
+        value = value.replace(char, escaped)
+    return value
+
+
+def _find_ad_user(samaccountname):
+    """Look up AD user by sAMAccountName. Returns ADUser or None."""
+    safe = _escape_ldap_filter(samaccountname)
+    q = adquery.ADQuery()
+    q.execute_query(
+        attributes=["distinguishedName", "sAMAccountName"],
+        where_clause=f"sAMAccountName = '{safe}'",
+    )
+    results = list(q.get_results())
+    if len(results) == 1:
+        return aduser.ADUser.from_dn(results[0]["distinguishedName"])
+    if len(results) > 1:
+        print(f"  WARNING: Multiple AD accounts matched '{samaccountname}'. Skipping.")
+    return None
+
+
+def clear_ad_phone_fields(samaccountname):
+    """
+    Remove telephoneNumber and ipPhone from the AD user account.
+    Uses clear_attribute() to fully remove the values.
+    Returns dict with keys: success, message.
+    """
+    if not PYAD_AVAILABLE:
+        return {"success": False, "message": "pyad not installed (pip install pyad)"}
+    try:
+        user = _find_ad_user(samaccountname)
+        if not user:
+            return {"success": False, "message": f"AD user '{samaccountname}' not found"}
+        user.clear_attribute("telephoneNumber")
+        user.clear_attribute("ipPhone")
+        return {"success": True, "message": "Cleared"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
 
 LAB_CUCM_IP = "lascucmpl01.ahs.int"
 PROD_CUCM_IP = "lascucmpp01.ahs.int"
@@ -707,6 +766,19 @@ def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, targe
                     "No DN found on matched devices",
                 ])
                 print("No DN found on matched devices; line update skipped.")
+
+            # ── Clear AD phone fields ────────────────────────────
+            try:
+                ad_result = clear_ad_phone_fields(user_details["userid"])
+                if ad_result["success"]:
+                    log_writer.writerow(["AD Clear", "Success", "telephoneNumber and ipPhone cleared"])
+                    print("✓ AD fields cleared: telephoneNumber, ipPhone")
+                else:
+                    log_writer.writerow(["AD Clear", "Warning", ad_result["message"]])
+                    print(f"⚠ AD clear skipped: {ad_result['message']}")
+            except Exception as ad_err:
+                log_writer.writerow(["AD Clear", "Error", str(ad_err)])
+                print(f"⚠ AD clear error: {ad_err}")
 
             if unity_deleted:
                 print("\nOffboarding complete: CSF/BOT/TCT removed, Unity mailbox removed, DN retained as inactive.")

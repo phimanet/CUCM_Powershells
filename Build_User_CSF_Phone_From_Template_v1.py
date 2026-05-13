@@ -3,13 +3,87 @@ import datetime
 import getpass
 import json
 import os
+import re
 import urllib3
 import requests
 import xml.etree.ElementTree as ET
 from requests.auth import HTTPBasicAuth
 from xml.sax.saxutils import escape
 
+try:
+    from pyad import aduser, adquery
+    PYAD_AVAILABLE = True
+except ImportError:
+    PYAD_AVAILABLE = False
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# ─────────────────────────────────────────
+# AD PHONE FIELD HELPERS
+# ─────────────────────────────────────────
+
+def _escape_ldap_filter(value):
+    """Escape LDAP filter metacharacters per RFC 4515 (backslash must be first)."""
+    for char, escaped in [
+        ("\\", "\\5c"),
+        ("*",  "\\2a"),
+        ("(",  "\\28"),
+        (")",  "\\29"),
+        ("\x00", "\\00"),
+    ]:
+        value = value.replace(char, escaped)
+    return value
+
+
+def _ad_format_phone_dashes(phone):
+    """Format 10-digit number as 999-999-9999 for telephoneNumber."""
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) == 10:
+        return f"{digits[0:3]}-{digits[3:6]}-{digits[6:10]}"
+    return phone
+
+
+def _ad_format_phone_plain(phone):
+    """Return digits-only 10-digit number for ipPhone."""
+    digits = re.sub(r"\D", "", phone)
+    return digits if len(digits) == 10 else phone
+
+
+def _find_ad_user(samaccountname):
+    """Look up AD user by sAMAccountName. Returns ADUser or None."""
+    safe = _escape_ldap_filter(samaccountname)
+    q = adquery.ADQuery()
+    q.execute_query(
+        attributes=["distinguishedName", "sAMAccountName"],
+        where_clause=f"sAMAccountName = '{safe}'",
+    )
+    results = list(q.get_results())
+    if len(results) == 1:
+        return aduser.ADUser.from_dn(results[0]["distinguishedName"])
+    if len(results) > 1:
+        print(f"  WARNING: Multiple AD accounts matched '{samaccountname}'. Skipping.")
+    return None
+
+
+def update_ad_phone_fields(samaccountname, phone_number):
+    """
+    Set telephoneNumber (dashes) and ipPhone (digits) for the given sAMAccountName.
+    Returns dict with keys: success, telephone, ipphone, message.
+    """
+    if not PYAD_AVAILABLE:
+        return {"success": False, "message": "pyad not installed (pip install pyad)"}
+    try:
+        user = _find_ad_user(samaccountname)
+        if not user:
+            return {"success": False, "message": f"AD user '{samaccountname}' not found"}
+        phone_dashes = _ad_format_phone_dashes(phone_number)
+        phone_plain  = _ad_format_phone_plain(phone_number)
+        user.update_attribute("telephoneNumber", phone_dashes)
+        user.update_attribute("ipPhone", phone_plain)
+        return {"success": True, "telephone": phone_dashes, "ipphone": phone_plain, "message": "Updated"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
 
 LAB_CUCM_IP = "lascucmpl01.ahs.int"
 PROD_CUCM_IP = "lascucmpp01.ahs.int"
@@ -82,33 +156,44 @@ def confirm_yes_no(prompt, default_yes=True):
     return value in ["y", "yes"]
 
 
+def sanitize_for_filename(value):
+    safe = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in value)
+    return safe.strip("._") or "unknown_user"
+
+
 def choose_environment():
-    print("\nSelect CUCM Environment:")
-    print("  1 - PRODUCTION (lascucmpp01.ahs.int)")
-    print("  2 - LAB        (lascucmpl01.ahs.int)")
-    print("  0 - Return to main menu")
-    choice = input("Enter choice (0, 1, or 2): ").strip()
-    if choice == "0":
-        return None, None
-    if choice == "1":
-        return PROD_CUCM_IP, "PRODUCTION"
-    return LAB_CUCM_IP, "LAB"
+    while True:
+        print("\nSelect CUCM Environment:")
+        print("  1 - PRODUCTION (lascucmpp01.ahs.int)")
+        print("  2 - LAB        (lascucmpl01.ahs.int)")
+        print("  0 - Return to main menu")
+        choice = input("Enter choice (0, 1, or 2): ").strip()
+        if choice == "0":
+            return None, None
+        if choice == "1":
+            return PROD_CUCM_IP, "PRODUCTION"
+        if choice == "2":
+            return LAB_CUCM_IP, "LAB"
+        print("Invalid choice. Please enter 0, 1, or 2.")
 
 
 def choose_dn_prefix():
-    print("\nSelect Directory Number Type:")
-    print("  1 - Recruiter (469)")
-    print("  2 - General FTE (214)")
-    print("  3 - Strike (945)")
-    print("  0 - Return to main menu")
-    choice = input("Enter choice (0, 1, 2, or 3): ").strip()
-    if choice == "0":
-        return None, None
-    if choice == "1":
-        return "469", "Recruiter"
-    if choice == "3":
-        return "945", "Strike"
-    return "214", "General FTE"
+    while True:
+        print("\nSelect Directory Number Type:")
+        print("  1 - Recruiter (469)")
+        print("  2 - General FTE (214)")
+        print("  3 - Strike (945)")
+        print("  0 - Return to main menu")
+        choice = input("Enter choice (0, 1, 2, or 3): ").strip()
+        if choice == "0":
+            return None, None
+        if choice == "1":
+            return "469", "Recruiter"
+        if choice == "2":
+            return "214", "General FTE"
+        if choice == "3":
+            return "945", "Strike"
+        print("Invalid choice. Please enter 0, 1, 2, or 3.")
 
 
 def make_unity_url(server, path):
@@ -670,15 +755,27 @@ def main():
             return
         print(f"Using DN type: {dn_type_name} ({dn_prefix}xxxxxxx)")
 
-        target_user = input("Username of the person who needs Cisco Jabber: ").strip()
+        target_user = input("Username of the person who needs Cisco Jabber (or 0 to return): ").strip()
+
+        if target_user == "0":
+            return
 
         if not target_user:
             print("No target userid provided. Returning to main menu.")
             return
 
+        print("\nBuild request summary:")
+        print(f"  Environment: {env_name} ({cucm_ip})")
+        print(f"  DN Type: {dn_type_name} ({dn_prefix})")
+        print(f"  Target User: {target_user}")
+        if not confirm_yes_no("Proceed with this build request?", default_yes=True):
+            print("Request canceled. Returning to selection.")
+            continue
+
         current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         os.makedirs(OUTPUT_DIR, exist_ok=True)
-        log_filename = os.path.join(OUTPUT_DIR, f"build_user_csf_phone_{target_user}_{current_time}.csv")
+        safe_target_user = sanitize_for_filename(target_user)
+        log_filename = os.path.join(OUTPUT_DIR, f"build_user_csf_phone_{safe_target_user}_{current_time}.csv")
 
         run_success = False
 
@@ -790,11 +887,23 @@ def main():
                                 log_writer.writerow(["Unity Voicemail", "Failed", str(unity_error)])
                                 print(f"✗ Unity voicemail step failed: {unity_error}")
 
-                            print(f"\nScript complete! Results logged to: {log_filename}")
-                            run_success = True
+                        # ── Update AD phone fields ──────────────────────────
+                        try:
+                            ad_result = update_ad_phone_fields(user_details["userid"], new_dn)
+                            if ad_result["success"]:
+                                log_writer.writerow([
+                                    "AD Update",
+                                    "Success",
+                                    f"telephoneNumber={ad_result['telephone']}, ipPhone={ad_result['ipphone']}",
+                                ])
+                                print(f"✓ AD fields updated: telephoneNumber={ad_result['telephone']}, ipPhone={ad_result['ipphone']}")
+                            else:
+                                log_writer.writerow(["AD Update", "Warning", ad_result["message"]])
+                                print(f"⚠ AD update skipped: {ad_result['message']}")
+                        except Exception as ad_err:
+                            log_writer.writerow(["AD Update", "Error", str(ad_err)])
+                            print(f"⚠ AD update error: {ad_err}")
 
-            except Exception as e:
-                err_msg = str(e)
                 log_writer.writerow(["Script", "Error", err_msg])
                 if "The specified User was not found" in err_msg or "5007" in err_msg:
                     print(f"\n✗ Invalid User: '{target_user}' was not found in CUCM.")
