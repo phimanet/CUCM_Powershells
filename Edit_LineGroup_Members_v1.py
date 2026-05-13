@@ -160,16 +160,17 @@ def update_line_group_members(session, cucm_ip, line_group_name, members):
         return False, "Cannot update line group with zero members via this script."
 
     member_xml_parts = []
-    for pattern, partition in members:
+    for line_order, (pattern, partition) in enumerate(members, start=1):
         member_xml_parts.append(
             """
             <member>
+               <lineSelectionOrder>{line_order}</lineSelectionOrder>
                <directoryNumber>
                   <pattern>{pattern}</pattern>
                   <routePartitionName>{partition}</routePartitionName>
                </directoryNumber>
             </member>
-            """.format(pattern=xml_escape(pattern), partition=xml_escape(partition))
+            """.format(line_order=line_order, pattern=xml_escape(pattern), partition=xml_escape(partition))
         )
 
     members_xml = "\n".join(member_xml_parts)
@@ -217,19 +218,6 @@ else:
     CUCM_IP = 'lascucmpl01.ahs.int'
     print("Using LAB CUCM")
 
-print("\nSelect Action:")
-print("  1 - Add number to Line Group")
-print("  2 - Remove number from Line Group")
-action_choice = input("Enter choice (1 or 2): ").strip()
-
-if action_choice == '1':
-    action = 'ADD'
-elif action_choice == '2':
-    action = 'REMOVE'
-else:
-    print("Invalid action selected. Exiting.")
-    exit(1)
-
 partial_name = input("\nEnter full or partial Line Group name: ").strip()
 if not partial_name:
     print("Line Group search text is required. Exiting.")
@@ -263,85 +251,129 @@ if selection < 1 or selection > len(matches):
 line_group_name = matches[selection - 1]
 print(f"Selected Line Group: {line_group_name}")
 
-try:
-    members = get_line_group_members(session, CUCM_IP, line_group_name)
-except Exception as e:
-    print(f"✗ Could not read current members: {e}")
-    exit(1)
-
-alerting_cache = {}
-
-print("\nCurrent Line Group Members:")
-if members:
-    print(f"{'Extension':<15} {'Route Partition':<35} Alerting Name")
-    print("-" * 90)
-    for pattern, partition in members:
-        key = f"{pattern}|{partition}"
-        if key not in alerting_cache:
-            alerting_cache[key] = lookup_alerting_name(session, CUCM_IP, pattern, partition)
-        print(f"{pattern:<15} {partition:<35} {alerting_cache[key]}")
-else:
-    print("(No members found)")
-
-target_pattern = input("Enter Directory Number pattern (extension): ").strip()
-target_partition = input("Enter Route Partition name: ").strip()
-
-if not target_pattern or not target_partition:
-    print("Pattern and Route Partition are both required. Exiting.")
-    exit(1)
-
-confirm = input(
-    f"\nConfirm {action} {target_pattern} ({target_partition}) in '{line_group_name}'? (Y/N): "
-).strip().lower()
-if confirm not in ('y', 'yes'):
-    print("Cancelled by user. Exiting.")
-    exit(0)
-
 current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 output_dir = 'output_logs'
 os.makedirs(output_dir, exist_ok=True)
 log_filename = os.path.join(output_dir, f"edit_line_group_members_{current_time}.csv")
 
-status = ""
-details = ""
+results = []
+alerting_cache = {}
 
-try:
-    before_count = len(members)
-    target = (target_pattern, target_partition)
+while True:
+    try:
+        members = get_line_group_members(session, CUCM_IP, line_group_name)
+    except Exception as e:
+        print(f"✗ Could not read current members: {e}")
+        if not results:
+            exit(1)
+        break
 
-    if action == 'ADD':
-        if target in members:
-            status = "Skipped"
-            details = "Directory Number is already a member of the Line Group"
-            after_count = before_count
-        else:
-            members.append(target)
-            success, result = update_line_group_members(session, CUCM_IP, line_group_name, members)
-            status = "Success" if success else "Failed"
-            details = result
-            after_count = len(members) if success else before_count
+    print("\nCurrent Line Group Members:")
+    if members:
+        print(f"{'Extension':<15} {'Route Partition':<35} Alerting Name")
+        print("-" * 90)
+        for pattern, partition in members:
+            key = f"{pattern}|{partition}"
+            if key not in alerting_cache:
+                alerting_cache[key] = lookup_alerting_name(session, CUCM_IP, pattern, partition)
+            print(f"{pattern:<15} {partition:<35} {alerting_cache[key]}")
     else:
-        if target not in members:
-            status = "Skipped"
-            details = "Directory Number was not found in the Line Group"
-            after_count = before_count
-        else:
-            new_members = [m for m in members if m != target]
-            if not new_members:
-                status = "Skipped"
-                details = "Cannot remove the last member from the Line Group with this script"
-                after_count = before_count
-            else:
-                success, result = update_line_group_members(session, CUCM_IP, line_group_name, new_members)
-                status = "Success" if success else "Failed"
-                details = result
-                after_count = len(new_members) if success else before_count
+        print("(No members found)")
 
-except Exception as e:
-    status = "Error"
-    details = str(e)
-    before_count = 0
-    after_count = 0
+    print("\nSelect Action for this Line Group:")
+    print("  1 - Add number to Line Group")
+    print("  2 - Remove number from Line Group")
+    operation_choice = input("Enter choice (1 or 2): ").strip()
+
+    if operation_choice == '1':
+        operation_action = 'ADD'
+    elif operation_choice == '2':
+        operation_action = 'REMOVE'
+    else:
+        print("Invalid action selected. Exiting.")
+        break
+
+    target_pattern = input("Enter Directory Number pattern (extension): ").strip()
+    target_partition = "ENT_DEVICE_PT"
+
+    if not target_pattern:
+        print("Directory Number pattern is required. Exiting.")
+        break
+
+    confirm = input(
+        f"\nConfirm {operation_action} {target_pattern} ({target_partition}) in '{line_group_name}'? (Y/N): "
+    ).strip().lower()
+    if confirm not in ('y', 'yes'):
+        print("Cancelled for this entry.")
+    else:
+        status = ""
+        details = ""
+
+        try:
+            before_count = len(members)
+            target = (target_pattern, target_partition)
+
+            if operation_action == 'ADD':
+                if target in members:
+                    status = "Skipped"
+                    details = "Directory Number is already a member of the Line Group"
+                    after_count = before_count
+                else:
+                    members.append(target)
+                    success, result = update_line_group_members(session, CUCM_IP, line_group_name, members)
+                    status = "Success" if success else "Failed"
+                    details = result
+                    after_count = len(members) if success else before_count
+                    if success:
+                        alerting_cache.setdefault(
+                            f"{target_pattern}|{target_partition}",
+                            lookup_alerting_name(session, CUCM_IP, target_pattern, target_partition),
+                        )
+            else:
+                if target not in members:
+                    status = "Skipped"
+                    details = "Directory Number was not found in the Line Group"
+                    after_count = before_count
+                else:
+                    new_members = [m for m in members if m != target]
+                    if not new_members:
+                        status = "Skipped"
+                        details = "Cannot remove the last member from the Line Group with this script"
+                        after_count = before_count
+                    else:
+                        success, result = update_line_group_members(session, CUCM_IP, line_group_name, new_members)
+                        status = "Success" if success else "Failed"
+                        details = result
+                        after_count = len(new_members) if success else before_count
+
+        except Exception as e:
+            status = "Error"
+            details = str(e)
+            before_count = len(members)
+            after_count = len(members)
+
+        results.append([
+            current_time,
+            operation_action,
+            line_group_name,
+            target_pattern,
+            target_partition,
+            status,
+            details,
+            before_count,
+            after_count
+        ])
+
+        if status == "Success":
+            print("\n✓ Line Group update completed successfully.")
+        elif status == "Skipped":
+            print(f"\n- No change applied: {details}")
+        else:
+            print(f"\n✗ Update failed: {details}")
+
+    more_entries = input(f"\nWould you like to update another number in '{line_group_name}'? (Y/N): ").strip().lower()
+    if more_entries not in ('y', 'yes'):
+        break
 
 with open(log_filename, 'w', newline='', encoding='utf-8') as logfile:
     log_writer = csv.writer(logfile)
@@ -356,23 +388,19 @@ with open(log_filename, 'w', newline='', encoding='utf-8') as logfile:
         'Members Before',
         'Members After'
     ])
-    log_writer.writerow([
-        current_time,
-        action,
-        line_group_name,
-        target_pattern,
-        target_partition,
-        status,
-        details,
-        before_count,
-        after_count
-    ])
-
-if status == "Success":
-    print("\n✓ Line Group update completed successfully.")
-elif status == "Skipped":
-    print(f"\n- No change applied: {details}")
-else:
-    print(f"\n✗ Update failed: {details}")
+    if results:
+        log_writer.writerows(results)
+    else:
+        log_writer.writerow([
+            current_time,
+            '',
+            line_group_name,
+            '',
+            '',
+            'Skipped',
+            'No line group member updates were submitted',
+            0,
+            0
+        ])
 
 print(f"Log file: {log_filename}")
