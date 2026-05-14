@@ -1,0 +1,7 @@
+Step,Status,Details
+Lookup User,Success,Found Alfredo.Salcedo
+Resolve DN,Success,Using End User primary extension 4695551213/ENT_DEVICE_PT
+Resolve Device Name,Success,Target device name TCT4695551213
+Template,Success,product=Cisco Dual Mode for iPhone; class=Phone; protocol=SIP; securityProfile=Cisco Dual Mode for iPhone - Standard SIP Non-Secure Profile; phoneTemplate=Standard Dual Mode for iPhone
+Add TCT Device,Success,Created TCT4695551213 with shared DN 4695551213
+Update End User,Success,Associated TCT4695551213 to user Alfredo.Salcedo

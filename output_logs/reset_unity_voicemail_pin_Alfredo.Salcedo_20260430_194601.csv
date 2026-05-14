@@ -1,0 +1,3 @@
+Step,Status,Details
+Lookup Mailbox,Success,Alias=Alfredo.Salcedo; Extension=4695551213; FirstName=Alfredo; LastName=Salcedo
+Reset PIN,Success,Reset voicemail PIN for Alfredo.Salcedo; must-change at next login enabled

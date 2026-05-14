@@ -1,0 +1,8 @@
+Step,Status,Details
+Lookup User,Success,Found Alfredo.Salcedo (Alfredo Salcedo)
+Update User,Success,"Rolled back End User entries for Alfredo.Salcedo: removed device CSF4692569978, removed CSF line presence mapping, cleared Primary Extension, UC Service Profile, and Roles"
+Verify End User Primary,Success,Primary extension now /
+Remove Phone,Success,Removed phone CSF4692569978
+Delete Unity Mailbox,Success,Deleted Unity mailbox alias Alfredo.Salcedo on SANCUTYP01.ahs.int
+Update Line Inactive,Success,Marked 4692569978/ENT_DEVICE_PT inactive and reusable
+Verify Line,Success,active=false; associatedDevices=0; description=CNAM:AMNHealthcare 4692569978 Automation Use Only

@@ -1,0 +1,12 @@
+Step,Status,Details
+Environment,Success,PRODUCTION (lascucmpp01.ahs.int)
+Unity Settings,Info,server=SANCUTYP01.ahs.int; templateAlias=T3-CST; ldapImportEnabled=True; defaultPin=56219
+DN Type,Success,Recruiter (469)
+Lookup User,Success,Found user Anna.Odor (Anna Odor)
+Select DN,Success,Using available DN 4692569977
+Add Phone,Success,Created CSF4692569977 with DN 4692569977
+Update Line,Success,Updated alerting names on DN 4692569977
+Update User,Success,Updated Anna.Odor with phone CSF4692569977 and DN 4692569977
+Unity Voicemail,Success,created_local Unity mailbox for Anna.Odor on SANCUTYP01.ahs.int using extension 4692569977
+Unity LDAP Integration,Manual,Admin confirmed manual LDAP integration checkbox
+Unity PIN,Success,Set default PIN (56219) and forced change for Anna.Odor

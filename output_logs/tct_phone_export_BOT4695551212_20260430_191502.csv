@@ -1,0 +1,136 @@
+Field,Value
+phone@ctiid,165
+phone@uuid,{F5475DFF-9E66-8ECA-7B1F-CCAF758536AB}
+phone.name,BOT4695551212
+phone.description,BOT Angela Billet
+phone.product,Cisco Dual Mode for Android
+phone.model,Cisco Dual Mode for Android
+phone.class,Phone
+phone.protocol,SIP
+phone.protocolSide,User
+phone.callingSearchSpaceName@uuid,{78E45910-E436-558B-4E42-45D70C9ADE63}
+phone.callingSearchSpaceName,Route_LAS_CSS
+phone.devicePoolName@uuid,{85A72653-7230-4A39-4471-6AAF078139FE}
+phone.devicePoolName,T3_PAC_DP
+phone.commonPhoneConfigName@uuid,{AC243D17-98B4-4118-8FEB-5FF2E1B781AC}
+phone.commonPhoneConfigName,Standard Common Phone Profile
+phone.networkLocation,Use System Default
+phone.locationName@uuid,{29C5C1C4-8871-4D1E-8394-0B9181E8C54D}
+phone.locationName,T3CTZ_LOC
+phone.mediaResourceListName@uuid,{1F90D8AF-5A48-42AC-0A89-51D40CC0943E}
+phone.mediaResourceListName,MRGL-LAS
+phone.loadInformation@special,false
+phone.vendorConfig.cuetLevel,1
+phone.vendorConfig.enableSipDigestAuthentication,0
+phone.vendorConfig.cucmGSMHandoffPreference,1
+phone.vendorConfig.ldapUseLDAPUserAuthentication,0
+phone.vendorConfig.ldapUseSSL,0
+phone.vendorConfig.dialerEmergencyNumbers,"999,911,112"
+phone.vendorConfig.useStandardRingtone,1
+phone.vendorConfig.minRingtoneVolume,0
+phone.vendorConfig.enableDVOFeature,0
+phone.vendorConfig.videoCapability,1
+phone.versionStamp,{1777601403-F479C04A-5EEC-4FB1-9403-5E273E331B95}
+phone.traceFlag,false
+phone.mlppIndicationStatus,Off
+phone.preemption,Disabled
+phone.useTrustedRelayPoint,Default
+phone.retryVideoCallAsAudio,true
+phone.securityProfileName@uuid,{9CEC6234-844D-4169-8A88-CB3CFEAD6838}
+phone.securityProfileName,Cisco Dual Mode for Android - Standard SIP Non-Secure Profile
+phone.sipProfileName@uuid,{FCBC7581-4D8D-48F3-917E-00B09FB39213}
+phone.sipProfileName,Standard SIP Profile
+phone.useDevicePoolCgpnTransformCss,true
+phone.sendGeoLocation,false
+phone.lines.line@uuid,{DAECE923-DDF6-2BEB-4560-DFDCE8A6BA16}
+phone.lines.line.index,1
+phone.lines.line.display,Angela Billet
+phone.lines.line.dirn@uuid,{7C94D289-0D65-BD30-BFC0-B284A8860D10}
+phone.lines.line.dirn.pattern,4695551212
+phone.lines.line.dirn.routePartitionName@uuid,{80E2BB51-7F8E-A023-4ABD-8BCC9F0FB646}
+phone.lines.line.dirn.routePartitionName,ENT_DEVICE_PT
+phone.lines.line.ringSetting,Ring
+phone.lines.line.consecutiveRingSetting,Use System Default
+phone.lines.line.displayAscii,Angela Billet
+phone.lines.line.e164Mask,4695551212
+phone.lines.line.mwlPolicy,Use System Policy
+phone.lines.line.maxNumCalls,2
+phone.lines.line.busyTrigger,2
+phone.lines.line.callInfoDisplay.callerName,true
+phone.lines.line.callInfoDisplay.callerNumber,true
+phone.lines.line.callInfoDisplay.redirectedNumber,true
+phone.lines.line.callInfoDisplay.dialedNumber,true
+phone.lines.line.recordingFlag,Call Recording Disabled
+phone.lines.line.audibleMwi,Default
+phone.lines.line.partitionUsage,General
+phone.lines.line.associatedEndusers.enduser.userId,Angela.Billet
+phone.lines.line.missedCallLogging,true
+phone.lines.line.recordingMediaSource,Gateway Preferred
+phone.numberOfButtons,8
+phone.phoneTemplateName@uuid,{105356B9-833A-4211-8D29-C109A00BEE00}
+phone.phoneTemplateName,Standard Dual Mode for Android
+phone.ringSettingIdleBlfAudibleAlert,Default
+phone.ringSettingBusyBlfAudibleAlert,Default
+phone.softkeyTemplateName@uuid,{72F64050-7AD5-4B47-9BFA-5E9AD9CD4AA9}
+phone.softkeyTemplateName,Standard User
+phone.enableExtensionMobility,false
+phone.currentConfig.phoneTemplateName@uuid,{105356B9-833A-4211-8D29-C109A00BEE00}
+phone.currentConfig.phoneTemplateName,Standard Dual Mode for Android
+phone.currentConfig.mlppIndicationStatus,Off
+phone.currentConfig.preemption,Disabled
+phone.currentConfig.softkeyTemplateName@uuid,{72F64050-7AD5-4B47-9BFA-5E9AD9CD4AA9}
+phone.currentConfig.softkeyTemplateName,Standard User
+phone.currentConfig.ignorePresentationIndicators,false
+phone.currentConfig.singleButtonBarge,Off
+phone.currentConfig.joinAcrossLines,Off
+phone.currentConfig.callInfoPrivacyStatus,Default
+phone.currentConfig.dndRingSetting,Disable
+phone.currentConfig.dndOption,Call Reject
+phone.currentConfig.alwaysUsePrimeLine,Default
+phone.currentConfig.alwaysUsePrimeLineForVoiceMessage,Default
+phone.singleButtonBarge,Off
+phone.joinAcrossLines,Off
+phone.builtInBridgeStatus,Default
+phone.callInfoPrivacyStatus,Default
+phone.hlogStatus,On
+phone.ownerUserName@uuid,d57d6833-b0d2-94a5-ddda-59c3b73e87d1
+phone.ownerUserName,Angela.Billet
+phone.ignorePresentationIndicators,false
+phone.packetCaptureMode,None
+phone.packetCaptureDuration,0
+phone.subscribeCallingSearchSpaceName@uuid,{A87C083B-260C-2D24-FE1D-8D23C6B66DB5}
+phone.subscribeCallingSearchSpaceName,Route_Internal_CSS
+phone.rerouteCallingSearchSpaceName@uuid,{A87C083B-260C-2D24-FE1D-8D23C6B66DB5}
+phone.rerouteCallingSearchSpaceName,Route_Internal_CSS
+phone.allowCtiControlFlag,true
+phone.presenceGroupName@uuid,{AD243D17-98B4-4118-8FEB-5FF2E1B781AC}
+phone.presenceGroupName,Standard Presence group
+phone.unattendedPort,false
+phone.requireDtmfReception,false
+phone.rfc2833Disabled,false
+phone.certificateOperation,No Pending Operation
+phone.certificateStatus,None
+phone.deviceMobilityMode,Default
+phone.remoteDevice,false
+phone.dndOption,Call Reject
+phone.dndRingSetting,Disable
+phone.dndStatus,false
+phone.isActive,true
+phone.isDualMode,true
+phone.phoneSuite,Default
+phone.phoneServiceDisplay,Default
+phone.isProtected,false
+phone.mtpRequired,false
+phone.mtpPreferedCodec,711ulaw
+phone.outboundCallRollover,No Rollover
+phone.hotlineDevice,false
+phone.alwaysUsePrimeLine,Default
+phone.alwaysUsePrimeLineForVoiceMessage,Default
+phone.deviceTrustMode,Not Trusted
+phone.AllowPresentationSharingUsingBfcp,false
+phone.confidentialAccess.confidentialAccessLevel,-1
+phone.allowiXApplicableMedia,false
+phone.useDevicePoolCgpnIngressDN,true
+phone.enableCallRoutingToRdWhenNoneIsActive,false
+phone.enableActivationID,false
+phone.allowMraMode,false

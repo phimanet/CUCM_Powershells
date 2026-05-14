@@ -1,0 +1,9 @@
+Step,Status,Details
+Lookup User,Success,Found Alfredo.Salcedo
+Resolve DN,Success,Using End User primary extension 4695551213/ENT_DEVICE_PT
+Resolve Device Names,Success,TCT=TCT4695551213; BOT=BOT4695551213
+TCT Template,Success,product=Cisco Dual Mode for iPhone; class=Phone; protocol=SIP; securityProfile=Cisco Dual Mode for iPhone - Standard SIP Non-Secure Profile; phoneTemplate=Standard Dual Mode for iPhone
+Add TCT Device,Success,Created TCT4695551213 with shared DN 4695551213
+BOT Template,Success,product=Cisco Dual Mode for Android; class=Phone; protocol=SIP; securityProfile=Cisco Dual Mode for Android - Standard SIP Non-Secure Profile; phoneTemplate=Standard Dual Mode for Android
+Add BOT Device,Success,Created BOT4695551213 with shared DN 4695551213
+Update End User,Success,Associated STRIKE MODE devices to user Alfredo.Salcedo

@@ -1,0 +1,7 @@
+Step,Status,Details
+Lookup User,Success,Found Angela.Billet
+Resolve DN,Success,Using End User primary extension 4695551212/ENT_DEVICE_PT
+Resolve Device Name,Success,Target device name TCT4695551212
+Template,Success,product=Cisco Dual Mode for iPhone; class=Phone; protocol=SIP; securityProfile=Cisco Dual Mode for iPhone - Standard SIP Non-Secure Profile; phoneTemplate=Standard Dual Mode for iPhone
+Add TCT Device,Success,Created TCT4695551212 with shared DN 4695551212
+Update End User,Success,Associated TCT4695551212 to user Angela.Billet
