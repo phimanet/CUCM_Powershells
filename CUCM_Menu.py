@@ -60,6 +60,7 @@ def main():
         print(" 14. STRIKE MODE - Add Secondary Device Jabber TCT and BOT")
         print(" 16. Extract ALL Line Groups (Name + Extensions)")
         print(" 17. Edit Line Group Members (Add/Remove DN)")
+        print(" 18. Extract RPO Phones (CSF Only, Multi-Line by User)")
         
         print("\n--- Server Tools ---")
         print("  7. Do LDAP User Sync")
@@ -71,7 +72,7 @@ def main():
         print("  0. Exit")
         print("==================================================")
         
-        choice = input("\nEnter your choice (0-17): ")
+        choice = input("\nEnter your choice (0-18): ")
         
         if choice == '1':
             run_script("Add_DirectoryNumber_v1.py")
@@ -107,12 +108,14 @@ def main():
             run_script("Extract_All_LineGroups_v1.py")
         elif choice == '17':
             run_script("Edit_LineGroup_Members_v1.py")
+        elif choice == '18':
+            run_script("Extract_RPO_phones_v1.py")
         elif choice == '0':
             clear_screen()
             print("Exiting Toolkit. Goodbye!")
             break
         else:
-            print("\nInvalid choice. Please enter a number between 0 and 17.")
+            print("\nInvalid choice. Please enter a number between 0 and 18.")
             input("Press Enter to try again...")
 
 if __name__ == "__main__":
