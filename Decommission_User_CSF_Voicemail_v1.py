@@ -1,8 +1,10 @@
 import csv
 import datetime
 import getpass
+import json
 import os
 import re
+import subprocess
 import urllib3
 import requests
 import xml.etree.ElementTree as ET
@@ -10,7 +12,7 @@ from requests.auth import HTTPBasicAuth
 from xml.sax.saxutils import escape
 
 try:
-    from pyad import aduser, adquery
+    from pyad import adbase, aduser, adquery
     PYAD_AVAILABLE = True
 except ImportError:
     PYAD_AVAILABLE = False
@@ -34,8 +36,51 @@ def _escape_ldap_filter(value):
     return value
 
 
-def _find_ad_user(samaccountname):
+def _clear_ad_user_via_powershell(samaccountname, ad_username, ad_password):
+    """Clear AD phone attributes using explicit credentials via PowerShell AD module."""
+    payload = {
+        "username": ad_username,
+        "password": ad_password,
+        "samaccountname": samaccountname,
+    }
+    script = r"""
+$payload = [Console]::In.ReadToEnd() | ConvertFrom-Json
+Import-Module ActiveDirectory -ErrorAction Stop
+$secure = ConvertTo-SecureString $payload.password -AsPlainText -Force
+$cred = [System.Management.Automation.PSCredential]::new($payload.username, $secure)
+$filterValue = [string]$payload.samaccountname
+$user = Get-ADUser -Credential $cred -LDAPFilter "(sAMAccountName=$filterValue)" -Properties telephoneNumber, ipPhone
+if ($null -eq $user) {
+    throw "AD user '$filterValue' not found"
+}
+Set-ADUser -Credential $cred -Identity $user.DistinguishedName -Clear telephoneNumber, ipPhone -ErrorAction Stop
+@{ success = $true } | ConvertTo-Json -Compress
+"""
+    completed = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if completed.returncode != 0:
+        stderr = (completed.stderr or "").strip()
+        stdout = (completed.stdout or "").strip()
+        detail = stderr or stdout or f"PowerShell exited with code {completed.returncode}"
+        raise RuntimeError(f"AD clear failed: {detail}")
+
+    output = (completed.stdout or "").strip()
+    if output:
+        data = json.loads(output)
+        if not data.get("success"):
+            raise RuntimeError("AD clear did not report success")
+
+
+def _find_ad_user(samaccountname, ad_username=None, ad_password=None):
     """Look up AD user by sAMAccountName. Returns ADUser or None."""
+    if ad_username and ad_password:
+        adbase.set_defaults(username=ad_username, password=ad_password)
     safe = _escape_ldap_filter(samaccountname)
     q = adquery.ADQuery()
     q.execute_query(
@@ -50,20 +95,23 @@ def _find_ad_user(samaccountname):
     return None
 
 
-def clear_ad_phone_fields(samaccountname):
+def clear_ad_phone_fields(samaccountname, ad_username=None, ad_password=None):
     """
     Remove telephoneNumber and ipPhone from the AD user account.
     Uses clear_attribute() to fully remove the values.
     Returns dict with keys: success, message.
     """
-    if not PYAD_AVAILABLE:
+    if not PYAD_AVAILABLE and not (ad_username and ad_password):
         return {"success": False, "message": "pyad not installed (pip install pyad)"}
     try:
-        user = _find_ad_user(samaccountname)
-        if not user:
-            return {"success": False, "message": f"AD user '{samaccountname}' not found"}
-        user.clear_attribute("telephoneNumber")
-        user.clear_attribute("ipPhone")
+        if ad_username and ad_password:
+            _clear_ad_user_via_powershell(samaccountname, ad_username, ad_password)
+        else:
+            user = _find_ad_user(samaccountname)
+            if not user:
+                return {"success": False, "message": f"AD user '{samaccountname}' not found"}
+            user.clear_attribute("telephoneNumber")
+            user.clear_attribute("ipPhone")
         return {"success": True, "message": "Cleared"}
     except Exception as e:
         return {"success": False, "message": str(e)}
@@ -769,7 +817,11 @@ def run_decommission_for_user(cucm_ip, unity_server, cucm_user, cucm_pass, targe
 
             # ── Clear AD phone fields ────────────────────────────
             try:
-                ad_result = clear_ad_phone_fields(user_details["userid"])
+                ad_result = clear_ad_phone_fields(
+                    user_details["userid"],
+                    ad_username=cucm_user,
+                    ad_password=cucm_pass,
+                )
                 if ad_result["success"]:
                     log_writer.writerow(["AD Clear", "Success", "telephoneNumber and ipPhone cleared"])
                     print("✓ AD fields cleared: telephoneNumber, ipPhone")
