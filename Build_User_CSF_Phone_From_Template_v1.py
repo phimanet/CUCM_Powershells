@@ -4,6 +4,7 @@ import getpass
 import json
 import os
 import re
+import subprocess
 import urllib3
 import requests
 import xml.etree.ElementTree as ET
@@ -11,7 +12,7 @@ from requests.auth import HTTPBasicAuth
 from xml.sax.saxutils import escape
 
 try:
-    from pyad import aduser, adquery
+    from pyad import adbase, aduser, adquery
     PYAD_AVAILABLE = True
 except ImportError:
     PYAD_AVAILABLE = False
@@ -49,8 +50,56 @@ def _ad_format_phone_plain(phone):
     return digits if len(digits) == 10 else phone
 
 
-def _find_ad_user(samaccountname):
+def _update_ad_user_via_powershell(samaccountname, ad_username, ad_password, telephone_number, ip_phone):
+    """Update AD phone attributes with explicit credentials via PowerShell AD module."""
+    payload = {
+        "username": ad_username,
+        "password": ad_password,
+        "samaccountname": samaccountname,
+        "telephoneNumber": telephone_number,
+        "ipPhone": ip_phone,
+    }
+    script = r"""
+$payload = [Console]::In.ReadToEnd() | ConvertFrom-Json
+Import-Module ActiveDirectory -ErrorAction Stop
+$secure = ConvertTo-SecureString $payload.password -AsPlainText -Force
+$cred = [System.Management.Automation.PSCredential]::new($payload.username, $secure)
+$filterValue = [string]$payload.samaccountname
+$user = Get-ADUser -Credential $cred -LDAPFilter "(sAMAccountName=$filterValue)" -Properties telephoneNumber, ipPhone
+if ($null -eq $user) {
+    throw "AD user '$filterValue' not found"
+}
+Set-ADUser -Credential $cred -Identity $user.DistinguishedName -Replace @{
+    telephoneNumber = [string]$payload.telephoneNumber
+    ipPhone = [string]$payload.ipPhone
+} -ErrorAction Stop
+@{ success = $true } | ConvertTo-Json -Compress
+"""
+    completed = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if completed.returncode != 0:
+        stderr = (completed.stderr or "").strip()
+        stdout = (completed.stdout or "").strip()
+        detail = stderr or stdout or f"PowerShell exited with code {completed.returncode}"
+        raise RuntimeError(f"AD update failed: {detail}")
+
+    output = (completed.stdout or "").strip()
+    if output:
+        data = json.loads(output)
+        if not data.get("success"):
+            raise RuntimeError("AD update did not report success")
+
+
+def _find_ad_user(samaccountname, ad_username=None, ad_password=None):
     """Look up AD user by sAMAccountName. Returns ADUser or None."""
+    if ad_username and ad_password:
+        adbase.set_defaults(username=ad_username, password=ad_password)
     safe = _escape_ldap_filter(samaccountname)
     q = adquery.ADQuery()
     q.execute_query(
@@ -65,21 +114,31 @@ def _find_ad_user(samaccountname):
     return None
 
 
-def update_ad_phone_fields(samaccountname, phone_number):
+def update_ad_phone_fields(samaccountname, phone_number, ad_username=None, ad_password=None):
     """
     Set telephoneNumber (dashes) and ipPhone (digits) for the given sAMAccountName.
     Returns dict with keys: success, telephone, ipphone, message.
     """
-    if not PYAD_AVAILABLE:
+    if not PYAD_AVAILABLE and not (ad_username and ad_password):
         return {"success": False, "message": "pyad not installed (pip install pyad)"}
     try:
-        user = _find_ad_user(samaccountname)
-        if not user:
-            return {"success": False, "message": f"AD user '{samaccountname}' not found"}
         phone_dashes = _ad_format_phone_dashes(phone_number)
         phone_plain  = _ad_format_phone_plain(phone_number)
-        user.update_attribute("telephoneNumber", phone_dashes)
-        user.update_attribute("ipPhone", phone_plain)
+
+        if ad_username and ad_password:
+            _update_ad_user_via_powershell(
+                samaccountname,
+                ad_username,
+                ad_password,
+                telephone_number=phone_dashes,
+                ip_phone=phone_plain,
+            )
+        else:
+            user = _find_ad_user(samaccountname)
+            if not user:
+                return {"success": False, "message": f"AD user '{samaccountname}' not found"}
+            user.update_attribute("telephoneNumber", phone_dashes)
+            user.update_attribute("ipPhone", phone_plain)
         return {"success": True, "telephone": phone_dashes, "ipphone": phone_plain, "message": "Updated"}
     except Exception as e:
         return {"success": False, "message": str(e)}
@@ -719,208 +778,247 @@ def main():
     print(" CUCM AXL - Build CSF Phone From Static Template")
     print("==================================================\n")
 
-    template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), TEMPLATE_FILE)
-    if not os.path.exists(template_path):
-        print(f"Template file not found: {template_path}")
-        return
+    cucm_user = None
+    cucm_pass = None
+    unity_session = None
+    session = None
 
-    template = load_template(template_path)
-
-    cucm_ip, env_name = choose_environment()
-    if cucm_ip is None:
-        return
-    print(f"Using {env_name} CUCM: {cucm_ip}")
-
-    cucm_user = input("Enter CUCM Username: ").strip()
-    cucm_pass = getpass.getpass("Enter CUCM Password: ")
-
-    unity_config = UNITY_ENV_SETTINGS[env_name]
-    unity_server = unity_config["server"]
-    unity_template_alias = unity_config["template_alias"]
-    unity_default_pin = unity_config["default_pin"]
-    unity_ldap_import_enabled = unity_config["ldap_import_enabled"]
-    print(f"Using {env_name} Unity Connection: {unity_server}")
-
-    unity_session = requests.Session()
-    unity_session.verify = False
-    unity_session.auth = HTTPBasicAuth(cucm_user, cucm_pass)
-
-    session = requests.Session()
-    session.verify = False
-    session.auth = HTTPBasicAuth(cucm_user, cucm_pass)
-
-    while True:
-        dn_prefix, dn_type_name = choose_dn_prefix()
-        if dn_prefix is None:
-            return
-        print(f"Using DN type: {dn_type_name} ({dn_prefix}xxxxxxx)")
-
-        target_user = input("Username of the person who needs Cisco Jabber (or 0 to return): ").strip()
-
-        if target_user == "0":
+    try:
+        template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), TEMPLATE_FILE)
+        if not os.path.exists(template_path):
+            print(f"Template file not found: {template_path}")
             return
 
-        if not target_user:
-            print("No target userid provided. Returning to main menu.")
+        template = load_template(template_path)
+
+        cucm_ip, env_name = choose_environment()
+        if cucm_ip is None:
             return
+        print(f"Using {env_name} CUCM: {cucm_ip}")
 
-        print("\nBuild request summary:")
-        print(f"  Environment: {env_name} ({cucm_ip})")
-        print(f"  DN Type: {dn_type_name} ({dn_prefix})")
-        print(f"  Target User: {target_user}")
-        if not confirm_yes_no("Proceed with this build request?", default_yes=True):
-            print("Request canceled. Returning to selection.")
-            continue
+        cucm_user = input("Enter CUCM Username: ").strip()
+        cucm_pass = getpass.getpass("Enter CUCM Password: ")
 
-        current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        safe_target_user = sanitize_for_filename(target_user)
-        log_filename = os.path.join(OUTPUT_DIR, f"build_user_csf_phone_{safe_target_user}_{current_time}.csv")
-
-        run_success = False
-
-        with open(log_filename, "w", newline="", encoding="utf-8") as logfile:
-            log_writer = csv.writer(logfile)
-            log_writer.writerow(["Step", "Status", "Details"])
-
+        if PYAD_AVAILABLE:
             try:
-                user_details = get_user_details(session, cucm_ip, target_user)
-                full_name = " ".join(part for part in [user_details["firstName"], user_details["lastName"]] if part).strip()
-                display_name = full_name or user_details["displayName"] or user_details["userid"]
-                new_dn = choose_available_dn(session, cucm_ip, dn_prefix)
-                phone_name = f"{template['deviceNamePrefix']}{new_dn}"
-                description = f"CSF {display_name}".strip()
+                adbase.set_defaults(username=cucm_user, password=cucm_pass)
+                print("AD read/write will use the provided username/password.")
+            except Exception as ad_default_error:
+                print(f"WARNING: Could not set pyad defaults with provided credentials: {ad_default_error}")
 
-                print(f"Found user: {user_details['userid']} | {display_name}")
-                print(f"Selected DN: {new_dn}")
-                print(f"New phone name: {phone_name}")
+        unity_config = UNITY_ENV_SETTINGS[env_name]
+        unity_server = unity_config["server"]
+        unity_template_alias = unity_config["template_alias"]
+        unity_default_pin = unity_config["default_pin"]
+        unity_ldap_import_enabled = unity_config["ldap_import_enabled"]
+        print(f"Using {env_name} Unity Connection: {unity_server}")
 
-                log_writer.writerow(["Environment", "Success", f"{env_name} ({cucm_ip})"])
-                log_writer.writerow([
-                    "Unity Settings",
-                    "Info",
-                    (
-                        f"server={unity_server}; templateAlias={unity_template_alias}; "
-                        f"ldapImportEnabled={unity_ldap_import_enabled}; defaultPin={unity_default_pin}"
-                    ),
-                ])
-                log_writer.writerow(["DN Type", "Success", f"{dn_type_name} ({dn_prefix})"])
-                log_writer.writerow(["Lookup User", "Success", f"Found user {user_details['userid']} ({display_name})"])
-                log_writer.writerow(["Select DN", "Success", f"Using available DN {new_dn}"])
+        unity_session = requests.Session()
+        unity_session.verify = False
+        unity_session.auth = HTTPBasicAuth(cucm_user, cucm_pass)
 
-                add_phone_soap = build_add_phone_soap(template, user_details, phone_name, description, new_dn, display_name)
-                update_line_soap = build_update_line_soap(new_dn, template["routePartitionName"], display_name)
-                update_user_soap = build_update_user_soap(user_details, phone_name, new_dn, template["routePartitionName"], description)
+        session = requests.Session()
+        session.verify = False
+        session.auth = HTTPBasicAuth(cucm_user, cucm_pass)
 
-                add_response = axl_post(session, cucm_ip, add_phone_soap)
-                if add_response.status_code != 200:
-                    log_writer.writerow(["Add Phone", "Failed", f"HTTP {add_response.status_code}: {add_response.text[:1000]}"])
-                    print(f"✗ Add Phone failed. HTTP {add_response.status_code}")
-                    print(add_response.text[:2000])
-                else:
-                    log_writer.writerow(["Add Phone", "Success", f"Created {phone_name} with DN {new_dn}"])
-                    print(f"✓ Added phone {phone_name}")
+        while True:
+            dn_prefix, dn_type_name = choose_dn_prefix()
+            if dn_prefix is None:
+                return
+            print(f"Using DN type: {dn_type_name} ({dn_prefix}xxxxxxx)")
 
-                    line_response = axl_post(session, cucm_ip, update_line_soap)
-                    if line_response.status_code != 200:
-                        log_writer.writerow(["Update Line", "Failed", f"HTTP {line_response.status_code}: {line_response.text[:1000]}"])
-                        print(f"✗ Update Line failed. HTTP {line_response.status_code}")
-                        print(line_response.text[:2000])
+            target_user = input("Username of the person who needs Cisco Jabber (or 0 to return): ").strip()
+
+            if target_user == "0":
+                return
+
+            if not target_user:
+                print("No target userid provided. Returning to main menu.")
+                return
+
+            print("\nBuild request summary:")
+            print(f"  Environment: {env_name} ({cucm_ip})")
+            print(f"  DN Type: {dn_type_name} ({dn_prefix})")
+            print(f"  Target User: {target_user}")
+            if not confirm_yes_no("Proceed with this build request?", default_yes=True):
+                print("Request canceled. Returning to selection.")
+                continue
+
+            current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            os.makedirs(OUTPUT_DIR, exist_ok=True)
+            safe_target_user = sanitize_for_filename(target_user)
+            log_filename = os.path.join(OUTPUT_DIR, f"build_user_csf_phone_{safe_target_user}_{current_time}.csv")
+
+            run_success = False
+
+            with open(log_filename, "w", newline="", encoding="utf-8") as logfile:
+                log_writer = csv.writer(logfile)
+                log_writer.writerow(["Step", "Status", "Details"])
+
+                try:
+                    user_details = get_user_details(session, cucm_ip, target_user)
+                    full_name = " ".join(part for part in [user_details["firstName"], user_details["lastName"]] if part).strip()
+                    display_name = full_name or user_details["displayName"] or user_details["userid"]
+                    new_dn = choose_available_dn(session, cucm_ip, dn_prefix)
+                    phone_name = f"{template['deviceNamePrefix']}{new_dn}"
+                    description = f"CSF {display_name}".strip()
+
+                    print(f"Found user: {user_details['userid']} | {display_name}")
+                    print(f"Selected DN: {new_dn}")
+                    print(f"New phone name: {phone_name}")
+
+                    log_writer.writerow(["Environment", "Success", f"{env_name} ({cucm_ip})"])
+                    log_writer.writerow([
+                        "Unity Settings",
+                        "Info",
+                        (
+                            f"server={unity_server}; templateAlias={unity_template_alias}; "
+                            f"ldapImportEnabled={unity_ldap_import_enabled}; defaultPin={unity_default_pin}"
+                        ),
+                    ])
+                    log_writer.writerow(["DN Type", "Success", f"{dn_type_name} ({dn_prefix})"])
+                    log_writer.writerow(["Lookup User", "Success", f"Found user {user_details['userid']} ({display_name})"])
+                    log_writer.writerow(["Select DN", "Success", f"Using available DN {new_dn}"])
+
+                    add_phone_soap = build_add_phone_soap(template, user_details, phone_name, description, new_dn, display_name)
+                    update_line_soap = build_update_line_soap(new_dn, template["routePartitionName"], display_name)
+                    update_user_soap = build_update_user_soap(user_details, phone_name, new_dn, template["routePartitionName"], description)
+
+                    add_response = axl_post(session, cucm_ip, add_phone_soap)
+                    if add_response.status_code != 200:
+                        log_writer.writerow(["Add Phone", "Failed", f"HTTP {add_response.status_code}: {add_response.text[:1000]}"])
+                        print(f"✗ Add Phone failed. HTTP {add_response.status_code}")
+                        print(add_response.text[:2000])
                     else:
-                        log_writer.writerow(["Update Line", "Success", f"Updated alerting names on DN {new_dn}"])
-                        print(f"✓ Updated line alerting fields for {new_dn}")
+                        log_writer.writerow(["Add Phone", "Success", f"Created {phone_name} with DN {new_dn}"])
+                        print(f"✓ Added phone {phone_name}")
 
-                        update_response = axl_post(session, cucm_ip, update_user_soap)
-                        if update_response.status_code != 200:
-                            log_writer.writerow(["Update User", "Failed", f"HTTP {update_response.status_code}: {update_response.text[:1000]}"])
-                            print(f"✗ Update User failed. HTTP {update_response.status_code}")
-                            print(update_response.text[:2000])
+                        line_response = axl_post(session, cucm_ip, update_line_soap)
+                        if line_response.status_code != 200:
+                            log_writer.writerow(["Update Line", "Failed", f"HTTP {line_response.status_code}: {line_response.text[:1000]}"])
+                            print(f"✗ Update Line failed. HTTP {line_response.status_code}")
+                            print(line_response.text[:2000])
                         else:
-                            log_writer.writerow(["Update User", "Success", f"Updated {user_details['userid']} with phone {phone_name} and DN {new_dn}"])
-                            print(f"✓ Updated end user {user_details['userid']}")
+                            log_writer.writerow(["Update Line", "Success", f"Updated alerting names on DN {new_dn}"])
+                            print(f"✓ Updated line alerting fields for {new_dn}")
 
-                            unity_email = user_details.get("mailid", "").strip() or f"{user_details['userid'].lower()}@amnhealthcare.com"
-                            unity_first = user_details.get("firstName", "").strip() or user_details["userid"]
-                            unity_last = user_details.get("lastName", "").strip() or user_details["userid"]
-                            unity_display = display_name
-
-                            try:
-                                unity_object_id, unity_action = create_or_update_unity_voicemail(
-                                    unity_session,
-                                    unity_server,
-                                    user_details["userid"],
-                                    unity_first,
-                                    unity_last,
-                                    unity_display,
-                                    new_dn,
-                                    unity_email,
-                                    unity_template_alias,
-                                    unity_ldap_import_enabled,
-                                )
-                                log_writer.writerow([
-                                    "Unity Voicemail",
-                                    "Success",
-                                    f"{unity_action} Unity mailbox for {user_details['userid']} on {unity_server} using extension {new_dn}",
-                                ])
-                                print(f"✓ Unity voicemail {unity_action} for {user_details['userid']}")
-
-                                latest_unity_user = get_unity_user_by_object_id(unity_session, unity_server, unity_object_id)
-                                if latest_unity_user and not user_is_ldap_integrated(latest_unity_user, user_details["userid"]):
-                                    print(
-                                        "\nAction required: In Unity Connection, open this user and check 'Integrate with LDAP Directory', then save."
-                                    )
-                                    input("Press Enter after saving LDAP integration in Unity: ")
-                                    log_writer.writerow([
-                                        "Unity LDAP Integration",
-                                        "Manual",
-                                        "Admin confirmed manual LDAP integration checkbox",
-                                    ])
-
-                                set_unity_pin(unity_session, unity_server, unity_object_id, unity_default_pin)
-                                log_writer.writerow([
-                                    "Unity PIN",
-                                    "Success",
-                                    f"Set default PIN ({unity_default_pin}) and forced change for {user_details['userid']}",
-                                ])
-                                print("✓ Unity PIN set successfully")
-                            except Exception as unity_error:
-                                log_writer.writerow(["Unity Voicemail", "Failed", str(unity_error)])
-                                print(f"✗ Unity voicemail step failed: {unity_error}")
-
-                        # ── Update AD phone fields ──────────────────────────
-                        try:
-                            ad_result = update_ad_phone_fields(user_details["userid"], new_dn)
-                            if ad_result["success"]:
-                                log_writer.writerow([
-                                    "AD Update",
-                                    "Success",
-                                    f"telephoneNumber={ad_result['telephone']}, ipPhone={ad_result['ipphone']}",
-                                ])
-                                print(f"✓ AD fields updated: telephoneNumber={ad_result['telephone']}, ipPhone={ad_result['ipphone']}")
+                            update_response = axl_post(session, cucm_ip, update_user_soap)
+                            if update_response.status_code != 200:
+                                log_writer.writerow(["Update User", "Failed", f"HTTP {update_response.status_code}: {update_response.text[:1000]}"])
+                                print(f"✗ Update User failed. HTTP {update_response.status_code}")
+                                print(update_response.text[:2000])
                             else:
-                                log_writer.writerow(["AD Update", "Warning", ad_result["message"]])
-                                print(f"⚠ AD update skipped: {ad_result['message']}")
-                        except Exception as ad_err:
-                            log_writer.writerow(["AD Update", "Error", str(ad_err)])
-                            print(f"⚠ AD update error: {ad_err}")
+                                log_writer.writerow(["Update User", "Success", f"Updated {user_details['userid']} with phone {phone_name} and DN {new_dn}"])
+                                print(f"✓ Updated end user {user_details['userid']}")
 
-                log_writer.writerow(["Script", "Error", err_msg])
-                if "The specified User was not found" in err_msg or "5007" in err_msg:
-                    print(f"\n✗ Invalid User: '{target_user}' was not found in CUCM.")
+                                unity_email = user_details.get("mailid", "").strip() or f"{user_details['userid'].lower()}@amnhealthcare.com"
+                                unity_first = user_details.get("firstName", "").strip() or user_details["userid"]
+                                unity_last = user_details.get("lastName", "").strip() or user_details["userid"]
+                                unity_display = display_name
+
+                                try:
+                                    unity_object_id, unity_action = create_or_update_unity_voicemail(
+                                        unity_session,
+                                        unity_server,
+                                        user_details["userid"],
+                                        unity_first,
+                                        unity_last,
+                                        unity_display,
+                                        new_dn,
+                                        unity_email,
+                                        unity_template_alias,
+                                        unity_ldap_import_enabled,
+                                    )
+                                    log_writer.writerow([
+                                        "Unity Voicemail",
+                                        "Success",
+                                        f"{unity_action} Unity mailbox for {user_details['userid']} on {unity_server} using extension {new_dn}",
+                                    ])
+                                    print(f"✓ Unity voicemail {unity_action} for {user_details['userid']}")
+
+                                    latest_unity_user = get_unity_user_by_object_id(unity_session, unity_server, unity_object_id)
+                                    if latest_unity_user and not user_is_ldap_integrated(latest_unity_user, user_details["userid"]):
+                                        print(
+                                            "\nAction required: In Unity Connection, open this user and check 'Integrate with LDAP Directory', then save."
+                                        )
+                                        input("Press Enter after saving LDAP integration in Unity: ")
+                                        log_writer.writerow([
+                                            "Unity LDAP Integration",
+                                            "Manual",
+                                            "Admin confirmed manual LDAP integration checkbox",
+                                        ])
+
+                                    set_unity_pin(unity_session, unity_server, unity_object_id, unity_default_pin)
+                                    log_writer.writerow([
+                                        "Unity PIN",
+                                        "Success",
+                                        f"Set default PIN ({unity_default_pin}) and forced change for {user_details['userid']}",
+                                    ])
+                                    print("✓ Unity PIN set successfully")
+
+                                    # Update AD phone fields only after voicemail build succeeds.
+                                    try:
+                                        ad_result = update_ad_phone_fields(
+                                            user_details["userid"],
+                                            new_dn,
+                                            ad_username=cucm_user,
+                                            ad_password=cucm_pass,
+                                        )
+                                        if ad_result["success"]:
+                                            log_writer.writerow([
+                                                "AD Update",
+                                                "Success",
+                                                f"telephoneNumber={ad_result['telephone']}, ipPhone={ad_result['ipphone']}",
+                                            ])
+                                            print(
+                                                f"✓ AD fields updated: telephoneNumber={ad_result['telephone']}, ipPhone={ad_result['ipphone']}"
+                                            )
+                                        else:
+                                            log_writer.writerow(["AD Update", "Warning", ad_result["message"]])
+                                            print(f"⚠ AD update skipped: {ad_result['message']}")
+                                    except Exception as ad_err:
+                                        log_writer.writerow(["AD Update", "Error", str(ad_err)])
+                                        print(f"⚠ AD update error: {ad_err}")
+                                except Exception as unity_error:
+                                    log_writer.writerow(["Unity Voicemail", "Failed", str(unity_error)])
+                                    log_writer.writerow(["AD Update", "Skipped", "Skipped because voicemail build failed"])
+                                    print(f"✗ Unity voicemail step failed: {unity_error}")
+
+                    run_success = True
+
+                except Exception as e:
+                    err_msg = str(e)
+                    log_writer.writerow(["Script", "Error", err_msg])
+                    if "The specified User was not found" in err_msg or "5007" in err_msg:
+                        print(f"\n✗ Invalid User: '{target_user}' was not found in CUCM.")
+                        print(f"Results logged to: {log_filename}")
+                        continue
+                    print(f"✗ Script error: {e}")
                     print(f"Results logged to: {log_filename}")
-                    continue
-                print(f"✗ Script error: {e}")
-                print(f"Results logged to: {log_filename}")
 
-        print("\nWhat would you like to do next?")
-        if run_success:
-            print("  1 - Run another Build CSF (reuse cached login)")
-        else:
-            print("  1 - Try another Build CSF (reuse cached login)")
-        print("  0 - Return to main menu")
-        next_choice = input("Enter choice (0 or 1): ").strip()
-        if next_choice != "1":
-            return
+            print("\nWhat would you like to do next?")
+            if run_success:
+                print("  1 - Run another Build CSF (reuse cached login)")
+            else:
+                print("  1 - Try another Build CSF (reuse cached login)")
+            print("  0 - Return to main menu")
+            next_choice = input("Enter choice (0 or 1): ").strip()
+            if next_choice != "1":
+                return
+    finally:
+        if session is not None:
+            session.auth = None
+            session.close()
+        if unity_session is not None:
+            unity_session.auth = None
+            unity_session.close()
+        if PYAD_AVAILABLE:
+            try:
+                adbase.set_defaults(username=None, password=None)
+            except Exception:
+                pass
+        cucm_user = None
+        cucm_pass = None
 
 
 if __name__ == "__main__":
