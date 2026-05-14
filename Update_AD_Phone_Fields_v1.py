@@ -95,6 +95,64 @@ if ($null -eq $user) {
     }
 
 
+def _update_ad_user_via_powershell(samaccountname, auth_context, telephone_number=None, ip_phone=None, clear=False):
+    """Update AD phone attributes with alternate credentials using PowerShell."""
+    payload = {
+        "username": auth_context["username"],
+        "password": auth_context["password"],
+        "samaccountname": samaccountname,
+        "telephoneNumber": telephone_number,
+        "ipPhone": ip_phone,
+        "clear": clear,
+    }
+    script = r"""
+$payload = [Console]::In.ReadToEnd() | ConvertFrom-Json
+Import-Module ActiveDirectory -ErrorAction Stop
+$secure = ConvertTo-SecureString $payload.password -AsPlainText -Force
+$cred = [System.Management.Automation.PSCredential]::new($payload.username, $secure)
+$filterValue = [string]$payload.samaccountname
+$user = Get-ADUser -Credential $cred -LDAPFilter "(sAMAccountName=$filterValue)" -Properties telephoneNumber, ipPhone
+if ($null -eq $user) {
+    throw "AD user '$filterValue' not found"
+}
+if ([bool]$payload.clear) {
+    Set-ADUser -Credential $cred -Identity $user.DistinguishedName -Clear telephoneNumber, ipPhone -ErrorAction Stop
+}
+else {
+    Set-ADUser -Credential $cred -Identity $user.DistinguishedName -Replace @{
+        telephoneNumber = [string]$payload.telephoneNumber
+        ipPhone = [string]$payload.ipPhone
+    } -ErrorAction Stop
+}
+@{ success = $true } | ConvertTo-Json -Compress
+"""
+    try:
+        completed = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"PowerShell AD update failed to start: {exc}") from exc
+
+    if completed.returncode != 0:
+        stderr = (completed.stderr or "").strip()
+        stdout = (completed.stdout or "").strip()
+        detail = stderr or stdout or f"PowerShell exited with code {completed.returncode}"
+        raise RuntimeError(f"Alternate-credential AD update failed: {detail}")
+
+    output = (completed.stdout or "").strip()
+    if output:
+        try:
+            data = json.loads(output)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Alternate-credential AD update returned unreadable output: {output}") from exc
+        if not data.get("success"):
+            raise RuntimeError("Alternate-credential AD update did not report success")
+
+
 def _get_ad_user_record(samaccountname, auth_context=None):
     """Return a normalized AD user record for the target sAMAccountName."""
     safe = _escape_ldap_filter(samaccountname)
@@ -184,17 +242,27 @@ def update_ad_phone_fields(samaccountname, phone_number, auth_context=None):
     Performs actual write to AD.
     Returns dict with keys: success, telephone, ipphone, message.
     """
-    if not PYAD_AVAILABLE:
+    auth_mode = (auth_context or {}).get("mode", "integrated")
+    if auth_mode != "alternate" and not PYAD_AVAILABLE:
         detail = f": {PYAD_IMPORT_ERROR}" if PYAD_IMPORT_ERROR else ""
         return {"success": False, "message": f"pyad unavailable{detail}"}
     try:
-        user = _find_ad_user(samaccountname, auth_context=auth_context)
-        if not user:
-            return {"success": False, "message": f"AD user '{samaccountname}' not found"}
         phone_dashes = _format_phone_dashes(phone_number)
         phone_plain  = _format_phone_plain(phone_number)
-        user.update_attribute("telephoneNumber", phone_dashes)
-        user.update_attribute("ipPhone", phone_plain)
+        if auth_mode == "alternate":
+            _update_ad_user_via_powershell(
+                samaccountname,
+                auth_context,
+                telephone_number=phone_dashes,
+                ip_phone=phone_plain,
+                clear=False,
+            )
+        else:
+            user = _find_ad_user(samaccountname, auth_context=auth_context)
+            if not user:
+                return {"success": False, "message": f"AD user '{samaccountname}' not found"}
+            user.update_attribute("telephoneNumber", phone_dashes)
+            user.update_attribute("ipPhone", phone_plain)
         return {
             "success": True,
             "telephone": phone_dashes,
@@ -211,15 +279,19 @@ def clear_ad_phone_fields(samaccountname, auth_context=None):
     Performs actual write to AD.
     Returns dict with keys: success, message.
     """
-    if not PYAD_AVAILABLE:
+    auth_mode = (auth_context or {}).get("mode", "integrated")
+    if auth_mode != "alternate" and not PYAD_AVAILABLE:
         detail = f": {PYAD_IMPORT_ERROR}" if PYAD_IMPORT_ERROR else ""
         return {"success": False, "message": f"pyad unavailable{detail}"}
     try:
-        user = _find_ad_user(samaccountname, auth_context=auth_context)
-        if not user:
-            return {"success": False, "message": f"AD user '{samaccountname}' not found"}
-        user.clear_attribute("telephoneNumber")
-        user.clear_attribute("ipPhone")
+        if auth_mode == "alternate":
+            _update_ad_user_via_powershell(samaccountname, auth_context, clear=True)
+        else:
+            user = _find_ad_user(samaccountname, auth_context=auth_context)
+            if not user:
+                return {"success": False, "message": f"AD user '{samaccountname}' not found"}
+            user.clear_attribute("telephoneNumber")
+            user.clear_attribute("ipPhone")
         return {"success": True, "message": "Cleared successfully"}
     except Exception as e:
         return {"success": False, "message": str(e)}
@@ -234,7 +306,7 @@ def main():
 
     try:
         print("=" * 60)
-        print("  AD PHONE FIELD UPDATER  —  DRY RUN ONLY")
+        print("  AD PHONE FIELD UPDATER")
         print("=" * 60 + "\n")
 
         print("NOTICE: This script will perform actual AD write operations.")
@@ -281,10 +353,10 @@ def main():
         print(f"  telephoneNumber : {before['telephoneNumber'] or '(empty)'}")
         print(f"  ipPhone         : {before['ipPhone'] or '(empty)'}")
 
-        # ── Action menu (dry-run previews only) ───────────────────
+        # ── Action menu ───────────────────────────────────────────
         print("\nActions:")
-        print("  1 - Preview SET   telephoneNumber and ipPhone")
-        print("  2 - Preview CLEAR telephoneNumber and ipPhone")
+        print("  1 - SET   telephoneNumber and ipPhone")
+        print("  2 - CLEAR telephoneNumber and ipPhone")
         print("  0 - Exit without changes")
         action = input("\nEnter choice (0, 1, or 2): ").strip()
 
